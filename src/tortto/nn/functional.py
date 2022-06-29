@@ -306,8 +306,7 @@ def backward(tensor: Tensor, grad, params):
     if inputs[0].requires_grad:
         dim = params['axis']
         y = tensor.data
-        output_interm = (grad - (grad * y).sum(dim, keepdims=True)) * y
-        inputs[0].grad += output_interm
+        inputs[0].grad += (grad - (grad * y).sum(dim, keepdims=True)) * y
 
 
 def log_softmax(inpt: Tensor, dim=None):
@@ -781,7 +780,7 @@ def conv2d(inpt, weight, bias, stride, padding, dilation, groups):
     x_data = inpt.data
     if not x_data.flags['C_CONTIGUOUS']:
         warnings.warn(
-            'Input to Conv2d is not contiguous, performance will drop significantly. Use x = x.contiguous()',
+            'Input to Conv2d is not contiguous, performance may drop significantly. Use x = x.contiguous()',
             RuntimeWarning)
     if x_data.ndim < 4:
         raise RuntimeError(f'Expected 4D (batched) input to conv2d, '
@@ -850,7 +849,7 @@ def conv_transpose2d(inpt, weight, bias, stride, padding, output_padding, groups
     x_data = inpt.data
     if not x_data.flags['C_CONTIGUOUS']:
         warnings.warn(
-            'Input to ConvTranspose2d is not contiguous, performance will drop significantly. Use x = x.contiguous()',
+            'Input to ConvTranspose2d is not contiguous, performance may drop significantly. Use x = x.contiguous()',
             RuntimeWarning)
     if x_data.ndim < 4:
         raise RuntimeError(f'Expected 4D (batched) input to conv_transpose2d, '
