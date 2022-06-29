@@ -1,0 +1,15 @@
+epoch000 finished at 06/21/2022, 16:00:33. val_loss: 2.2198 - val_error: 67.40%
+epoch001 finished at 06/21/2022, 16:04:45. val_loss: 0.8720 - val_error: 5.20%
+epoch002 finished at 06/21/2022, 16:08:57. val_loss: 0.4419 - val_error: 3.00%
+epoch003 finished at 06/21/2022, 16:13:09. val_loss: 0.2966 - val_error: 2.00%
+epoch004 finished at 06/21/2022, 16:17:21. val_loss: 0.2383 - val_error: 2.00%
+epoch005 finished at 06/21/2022, 16:21:33. val_loss: 0.2018 - val_error: 2.40%
+epoch006 finished at 06/21/2022, 16:25:45. val_loss: 0.1745 - val_error: 2.60%
+epoch007 finished at 06/21/2022, 16:29:57. val_loss: 0.1600 - val_error: 2.40%
+epoch008 finished at 06/21/2022, 16:34:08. val_loss: 0.1414 - val_error: 2.20%
+epoch009 finished at 06/21/2022, 16:38:21. val_loss: 0.1287 - val_error: 2.80%
+epoch010 finished at 06/21/2022, 16:42:33. val_loss: 0.1152 - val_error: 2.00%
+epoch011 finished at 06/21/2022, 16:46:44. val_loss: 0.1136 - val_error: 2.00%
+epoch012 finished at 06/21/2022, 16:50:56. val_loss: 0.0967 - val_error: 1.80%
+epoch013 finished at 06/21/2022, 16:55:09. val_loss: 0.1125 - val_error: 2.60%
+epoch014 finished at 06/21/2022, 16:59:21. val_loss: 0.1019 - val_error: 1.60%
