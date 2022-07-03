@@ -162,7 +162,7 @@ attention weight:
 
 
 ## Examples
-**All examples trained on a Tesla T4 (16GM mem) GPU**
+**All examples trained on a Tesla T4 (16GB memory) GPU**
 ## Resnet  
 * Trained on CIFAR10
 * Each epoch = 45k train + 5k validation 
