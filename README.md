@@ -204,7 +204,7 @@ model | test acc. | layers | Hidden size | MLP size | Heads | epochs trained | s
 [ViT-B/16 (finetune)](https://github.com/samrere/pytortto/tree/main/examples/transformers/vision_transformer_finetune) | **97.42%**| 12 | 768 | 3072 | 12 | 15 | 4.2 | 2.7 | 4.2/2.7=1.56
 * `ViT-B/16` Finetunes the full pretrained model. CIFAR-10 images are resized to 224x224 before feeding into the model.
 <p align="center">
-  <img src="https://drive.google.com/uc?export=view&id=1jYZnC7LrQkldyiZx9nKdlbY6oCk-4oMP" width="600">
+  <img src="https://drive.google.com/uc?export=view&id=1_QDvBgDreQgbGbNFOINeoFM_ZhWnFm0q" width="600">
 </p>
 
 
