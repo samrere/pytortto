@@ -175,7 +175,7 @@ model | test acc. | #.filters | n | epochs trained | speed (min/epoch) | pytorch
 [standard_resnet50 (finetune)](https://github.com/samrere/pytortto/blob/main/examples/resnet/resnet50_finetune) | **96.31%**| (64,128,256,512) | bottleNeck:(3,4,6,3) | 15 | 20.65 | 8.82 | 20.65/8.82=2.3
 [preact_resnet101](https://github.com/samrere/pytortto/blob/main/examples/resnet/preact_resnet101) | **94.78%**| (64,128,256,512) | bottleNeck:(3,4,23,3) | 200 | 9.2 | 4.3 | 9.2/4.3=2.1
 * `small_preact_resnet110`, `preact_resnet18` and `preact_resnet101` are trained from scratch. Kernel size of the first conv layer is 3, because CIFAR-10 images are 32x32 in size.
-* `resnet50` fintunes the full pretrained model. Kernel size of the first conv layer is 7. CIFAR-10 images are resized to 224x224 before feeding into the model.
+* `standard_resnet50` fintunes the full pretrained model. Kernel size of the first conv layer is 7. CIFAR-10 images are resized to 224x224 before feeding into the model.
 
 <p align="center">
   <img src="https://drive.google.com/uc?export=view&id=1vuuZjEWlv5PMy3uuEHOfJeM5YVLAoPtE" width="800">
