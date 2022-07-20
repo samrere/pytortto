@@ -26,7 +26,7 @@ pip install tortto
 ```
 
 ## Prerequisites
-**numpy** (required): Only use its basic functions. The "highest-level" function used are FFT, but I also implemented those in another repo: [FFT from scratch](https://github.com/samrere/fft-from-scratch). To use FFT in `Conv2d` and `ConvTranspose2d`, set `os.environ['fft'] = 'True'` before `import tortto`  
+**numpy** (required): Only use its basic functions. The "highest-level" function used are FFT, but I also implemented those in another repo: **[FFT from scratch](https://github.com/samrere/fft-from-scratch)**. To use FFT in `Conv2d` and `ConvTranspose2d`, set `os.environ['fft'] = 'True'` before `import tortto`  
 
 **scipy** (optional): Can be installed to improve efficiency in some functions:  
 * `scipy.fft.rfft2` and `scipy.fft.irfft2`. Numpy equivalence will be used if scipy is not installed, but `np.fft` only works in complex128 so it's slow.
