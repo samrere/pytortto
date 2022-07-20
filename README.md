@@ -157,7 +157,7 @@ The goal is to train a simple transformer encoder that can reverse the input seq
 ### [quick start: reverse prediction](https://github.com/samrere/pytortto/blob/main/examples/transformers/reverse_prediction.ipynb)
 attention weight:
 <p align="left">
-  <img src="https://drive.google.com/uc?export=view&id=16uXlgd1aEN49l-6dULFn1m4zAhAv8-in" width="250">
+  <img src="https://github.com/samrere/pytortto/raw/main/img/sequence_reverse.png" width="250">
 </p>
 
 
@@ -178,7 +178,7 @@ model | test acc. | #.filters | n | epochs trained | speed (min/epoch) | pytorch
 * `standard_resnet50` fintunes the full pretrained model. Kernel size of the first conv layer is 7. CIFAR-10 images are resized to 224x224 before feeding into the model.
 
 <p align="center">
-  <img src="https://drive.google.com/uc?export=view&id=1vuuZjEWlv5PMy3uuEHOfJeM5YVLAoPtE" width="800">
+  <img src="https://github.com/samrere/pytortto/raw/main/img/cifar10.png" width="800">
 </p>  
 
 ## UNet
@@ -191,7 +191,7 @@ model | image size | #.filters | batchsize | train/val/test | epochs
 [UNet](https://github.com/samrere/pytortto/tree/main/examples/unet) | resized to 3x64x64 | 32,64,128,256,512,256,128,64,32 | 32 | 3658/646/784 | 20 
 
 <p align="center">
-  <img src="https://drive.google.com/uc?export=view&id=1KlWhThhIC6ZW7y39psZT2jlPEVaTb6zU" width="600">
+  <img src="https://github.com/samrere/pytortto/raw/main/img/carvana.png" width="600">
 </p>
 
 ## Vision Transformer  
@@ -204,7 +204,7 @@ model | test acc. | layers | Hidden size | MLP size | Heads | epochs trained | s
 [ViT-B/16 (finetune)](https://github.com/samrere/pytortto/tree/main/examples/transformers/vision_transformer_finetune) | **97.42%**| 12 | 768 | 3072 | 12 | 15 | 4.2 | 2.7 | 4.2/2.7=1.56
 * `ViT-B/16` Finetunes the full pretrained model. CIFAR-10 images are resized to 224x224 before feeding into the model.
 <p align="center">
-  <img src="https://drive.google.com/uc?export=view&id=1_QDvBgDreQgbGbNFOINeoFM_ZhWnFm0q" width="600">
+  <img src="https://github.com/samrere/pytortto/raw/main/img/attn.png" width="600">
 </p>
 
 
