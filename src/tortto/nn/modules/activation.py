@@ -22,8 +22,29 @@ class LogSigmoid(Module):
 
 
 class ReLU(Module):
+    def __init__(self, inplace=False):
+        super(ReLU, self).__init__()
+        self.inplace = inplace
+
     def forward(self, tensor):
-        return F.relu(tensor)
+        return F.relu(tensor, inplace=self.inplace)
+
+    def extra_repr(self):
+        inplace_str = 'inplace=True' if self.inplace else ''
+        return inplace_str
+
+class LeakyReLU(Module):
+    def __init__(self, negative_slope=1e-2, inplace=False):
+        super(LeakyReLU, self).__init__()
+        self.negative_slope = negative_slope
+        self.inplace = inplace
+
+    def forward(self, tensor):
+        return F.leaky_relu(tensor, self.negative_slope, self.inplace)
+
+    def extra_repr(self):
+        inplace_str = ', inplace=True' if self.inplace else ''
+        return f'negative_slope={self.negative_slope}{inplace_str}'
 
 class GELU(Module):
     def forward(self, tensor):

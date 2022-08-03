@@ -7,3 +7,13 @@
 *backup*
 *test*
 *MNIST*
+
+*.7z
+*.dmg
+*.gz
+*.iso
+*.jar
+*.rar
+*.tar
+*.zip
+*.h5

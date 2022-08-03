@@ -337,6 +337,12 @@ class Module:
     def eval(self):
         return self.train(False)
 
+    def apply(self, fn):
+        for module in self.children():
+            module.apply(fn)
+        fn(self)
+        return self
+
     def cuda(self):
         r"""Moves all model parameters and buffers to the GPU.
 

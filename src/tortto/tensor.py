@@ -139,7 +139,8 @@ class Tensor:
         return _cpu(self)
 
     def detach(self):
-        return tensor(self.data)
+        # same as pytorch, where detached tensor share the same data with the original one.
+        return Tensor(self.data, requires_grad=False, dtype=self.data.dtype, copy=False)
 
     def numpy(self):
         data = self.data

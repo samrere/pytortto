@@ -69,9 +69,13 @@ if scipy_is_loaded:
 prod = math.prod if hasattr(math, 'prod') else np.prod
 
 
-def relu(inpt: Tensor):
+def relu(inpt: Tensor, inplace=False):
     x = inpt.data
-    value = x * (x > 0)
+    if inplace:
+        x *= x > 0
+        value = x
+    else:
+        value = x * (x > 0)
     output = build_links(value, inpt.requires_grad, relu, inpt)
     return output
 
@@ -81,6 +85,25 @@ def backward(tensor, grad, params):
     inputs = tensor.parents
     if inputs[0].requires_grad:
         inputs[0].grad += grad * (inputs[0].data > 0)
+
+
+def leaky_relu(inpt: Tensor, negative_slope=0.01, inplace=False):
+    x = inpt.data
+    xp = cp if x.__class__ is cp_ndarray else np
+    value = xp.maximum(x * negative_slope, x, out=x if inplace else None)
+    output = build_links(value, inpt.requires_grad, leaky_relu, inpt, negative_slope=negative_slope)
+    return output
+
+
+@register_gradients(leaky_relu)
+def backward(tensor, grad, params):
+    xp = cp if grad.__class__ is cp_ndarray else np
+    inputs = tensor.parents
+    negative_slope = params['negative_slope']
+    if inputs[0].requires_grad:
+        value = xp.ones_like(grad)
+        value[inputs[0].data < 0] = negative_slope
+        inputs[0].grad += grad * value
 
 
 def gelu(inpt):
@@ -150,7 +173,7 @@ def binary_cross_entropy(inpt, target, weight=None, reduction='mean'):
     xp = cp if x.__class__ is cp_ndarray else np
     y = target.data
     w = weight.data if weight is not None else 1
-    loss = xp.clip(-w * (y * xp.log(x) + (1 - y) * xp.log(1 - x)), -100, None)
+    loss = -w * (y * xp.clip(xp.log(x), -100, None) + (1 - y) * xp.clip(xp.log(1-x), -100, None))
     if reduction == 'mean':
         loss = loss.mean()
     elif reduction == 'sum':
@@ -173,7 +196,8 @@ def backward(tensor, grad, params):
     w = params['weight']
     if inputs[0].requires_grad:
         reduction = params['reduction']
-        value = grad * -w * (y / x - (1 - y) / (1 - x))
+        # value = grad * -w * (y / x - (1 - y) / (1 - x))
+        value = grad * w * (x-y) * xp.clip(1 / x, None, 1e12) * xp.clip(1 / (1-x), None, 1e12)
         if reduction == 'none':
             inputs[0].grad += value
         elif reduction == 'sum':
@@ -778,10 +802,10 @@ def conv2d(inpt, weight, bias, stride, padding, dilation, groups):
     note that the output is not contiguous
     """
     x_data = inpt.data
-    if not x_data.flags['C_CONTIGUOUS']:
-        warnings.warn(
-            'Input to Conv2d is not contiguous, performance may drop significantly. Use x = x.contiguous()',
-            RuntimeWarning)
+    # if not x_data.flags['C_CONTIGUOUS']:
+    #     warnings.warn(
+    #         'Input to Conv2d is not contiguous, performance may drop significantly. Use x = x.contiguous()',
+    #         RuntimeWarning)
     if x_data.ndim < 4:
         raise RuntimeError(f'Expected 4D (batched) input to conv2d, '
                            f'but got input of size: {x_data.shape}')
@@ -847,10 +871,10 @@ def conv_transpose2d(inpt, weight, bias, stride, padding, output_padding, groups
     note that the output is not contiguous
     """
     x_data = inpt.data
-    if not x_data.flags['C_CONTIGUOUS']:
-        warnings.warn(
-            'Input to ConvTranspose2d is not contiguous, performance may drop significantly. Use x = x.contiguous()',
-            RuntimeWarning)
+    # if not x_data.flags['C_CONTIGUOUS']:
+    #     warnings.warn(
+    #         'Input to ConvTranspose2d is not contiguous, performance may drop significantly. Use x = x.contiguous()',
+    #         RuntimeWarning)
     if x_data.ndim < 4:
         raise RuntimeError(f'Expected 4D (batched) input to conv_transpose2d, '
                            f'but got input of size: {x_data.shape}')
