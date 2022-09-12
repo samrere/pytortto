@@ -1,9 +1,9 @@
+import tortto
+from tortto import np, cp, cp_ndarray, _int_zero
+from .VariableFunctions import *
 from .autograd.grad_fcn import *
 from .autograd.grad_fcn import _slice, _view, _repeat, _expand, _cuda, _cpu
 from .autograd.grad_ufunc import *
-from .VariableFunctions import *
-
-from tortto import np, cp, cp_ndarray, _int_zero
 
 int16 = np.int16
 int32 = np.int32
@@ -16,6 +16,7 @@ complex128 = np.complex128
 
 Number = {int, float, bool}
 default_dtype = {int64, float32, complex64, np.bool_}
+
 
 class Tensor:
     def __init__(self, data, requires_grad=False, dtype=float32, copy=True):
@@ -41,7 +42,7 @@ class Tensor:
         if val.__class__ is not bool:
             raise RuntimeError('requires_grad must be a bool')
         if val is True:
-            dtype_type=self.data.dtype.type
+            dtype_type = self.data.dtype.type
             if not issubclass(dtype_type, np.complexfloating) and not issubclass(dtype_type, np.floating):
                 raise RuntimeError('only Tensors of floating point and complex dtype can require gradients')
         self._requires_grad = val
@@ -263,7 +264,7 @@ class Tensor:
     def __setitem__(self, key, value):
         self.data[key] = value
 
-    def __array__(self,dtype=None):
+    def __array__(self, dtype=None):
         """
         useful when setting tensor values using another tensor:
 
@@ -353,6 +354,12 @@ class Tensor:
 
     def sigmoid(self):
         return sigmoid(self)
+
+    def softmax(self,dim):
+        return tortto.nn.functional.softmax(self,dim)
+
+    def log_softmax(self,dim):
+        return tortto.nn.functional.log_softmax(self,dim)
 
     def type(self, dtype):
         self.data = self.data.astype(dtype, copy=False)
