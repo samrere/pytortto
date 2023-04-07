@@ -89,7 +89,7 @@ def backward(tensor, grad, params):
 
 def leaky_relu(inpt: Tensor, negative_slope=0.01, inplace=False):
     x = inpt.data
-    xp = cp if x.__class__ is cp_ndarray else np
+    xp = cp if x.__class__ is cparray else np
     value = xp.maximum(x * negative_slope, x, out=x if inplace else None)
     output = build_links(value, inpt.requires_grad, leaky_relu, inpt, negative_slope=negative_slope)
     return output
@@ -97,7 +97,7 @@ def leaky_relu(inpt: Tensor, negative_slope=0.01, inplace=False):
 
 @register_gradients(leaky_relu)
 def backward(tensor, grad, params):
-    xp = cp if grad.__class__ is cp_ndarray else np
+    xp = cp if grad.__class__ is cparray else np
     inputs = tensor.parents
     negative_slope = params['negative_slope']
     if inputs[0].requires_grad:
@@ -112,7 +112,7 @@ def gelu(inpt):
         raise RuntimeError(f'gelu not implemented for {x.dtype.type.__name__}')
     s = x / SQRT_2[x.dtype.type]
     # select erf
-    erf = cp_special.erf if x.__class__ is cp_ndarray else np_erf
+    erf = cp_special.erf if x.__class__ is cparray else np_erf
     erf_s = erf(s)
     value = HALF[x.dtype.type] * x * (erf_s + ONE[x.dtype.type])
     output = build_links(value, inpt.requires_grad, gelu, inpt, s=s, erf_s=erf_s)
@@ -121,7 +121,7 @@ def gelu(inpt):
 
 @register_gradients(gelu)
 def backward(tensor, grad, params):
-    xp = cp if grad.__class__ is cp_ndarray else np
+    xp = cp if grad.__class__ is cparray else np
     inputs = tensor.parents
     x = inputs[0].data
     s = params['s']
@@ -152,7 +152,7 @@ def mse_loss(inpt: Tensor, target: Tensor, reduction='mean'):
 
 @register_gradients(mse_loss)
 def backward(tensor, grad, params):
-    xp = cp if grad.__class__ is cp_ndarray else np
+    xp = cp if grad.__class__ is cparray else np
     inputs = tensor.parents
     target = params['target']
     if inputs[0].requires_grad:
@@ -170,7 +170,7 @@ def binary_cross_entropy(inpt, target, weight=None, reduction='mean'):
     if target.shape != inpt.shape:
         raise ValueError("Target size ({}) must be the same as input size ({})".format(target.shape, inpt.shape))
     x = inpt.data
-    xp = cp if x.__class__ is cp_ndarray else np
+    xp = cp if x.__class__ is cparray else np
     y = target.data
     w = weight.data if weight is not None else 1
     loss = -w * (y * xp.clip(xp.log(x), -100, None) + (1 - y) * xp.clip(xp.log(1-x), -100, None))
@@ -189,7 +189,7 @@ def binary_cross_entropy(inpt, target, weight=None, reduction='mean'):
 
 @register_gradients(binary_cross_entropy)
 def backward(tensor, grad, params):
-    xp = cp if grad.__class__ is cp_ndarray else np
+    xp = cp if grad.__class__ is cparray else np
     inputs = tensor.parents
     x = inputs[0].data
     y = params['target'].data
@@ -210,7 +210,7 @@ def binary_cross_entropy_with_logits(inpt, target, weight=None, pos_weight=None,
     if target.shape != inpt.shape:
         raise ValueError("Target size ({}) must be the same as input size ({})".format(target.shape, inpt.shape))
     x = inpt.data
-    xp = cp if x.__class__ is cp_ndarray else np
+    xp = cp if x.__class__ is cparray else np
     y = target.data
     w = weight.data if weight is not None else 1
     p = pos_weight.data if pos_weight is not None else 1
@@ -231,7 +231,7 @@ def binary_cross_entropy_with_logits(inpt, target, weight=None, pos_weight=None,
 
 @register_gradients(binary_cross_entropy_with_logits)
 def backward(tensor, grad, params):
-    xp = cp if grad.__class__ is cp_ndarray else np
+    xp = cp if grad.__class__ is cparray else np
     inputs = tensor.parents
     x = inputs[0].data
     y = params['target'].data
@@ -254,7 +254,7 @@ def nll_loss(inpt, target, weight=None, ignore_index=-100, reduction='mean'):
         raise RuntimeError(
             f'expected scalar type Int but found {target.dtype}. Use "dtype=int" when creating target tensor.')
     x = inpt.data
-    xp = cp if x.__class__ is cp_ndarray else np
+    xp = cp if x.__class__ is cparray else np
     y = target.data
     if weight is None:
         w = xp.ones((1, x.shape[1]), dtype=bool)
@@ -295,7 +295,7 @@ def nll_loss(inpt, target, weight=None, ignore_index=-100, reduction='mean'):
 
 @register_gradients(nll_loss)
 def backward(tensor, grad, params):
-    xp = cp if grad.__class__ is cp_ndarray else np
+    xp = cp if grad.__class__ is cparray else np
     inputs = tensor.parents
     x = inputs[0].data
     if x.ndim == 2:
@@ -316,7 +316,7 @@ def backward(tensor, grad, params):
 
 def softmax(inpt: Tensor, dim=None):
     x = inpt.data
-    xp = cp if x.__class__ is cp_ndarray else np
+    xp = cp if x.__class__ is cparray else np
     axis_aug = x - xp.max(x, axis=dim, keepdims=True)
     axis_exp = xp.exp(axis_aug)
     axis_sum_exp = xp.sum(axis_exp, axis=dim, keepdims=True)
@@ -335,7 +335,7 @@ def backward(tensor: Tensor, grad, params):
 
 def log_softmax(inpt: Tensor, dim=None):
     x = inpt.data
-    xp = cp if x.__class__ is cp_ndarray else np
+    xp = cp if x.__class__ is cparray else np
     axis_aug = x - xp.max(x, axis=dim, keepdims=True)
     axis_exp = xp.exp(axis_aug)
     axis_sum_exp = xp.sum(axis_exp, axis=dim, keepdims=True)
@@ -356,7 +356,7 @@ def backward(tensor: Tensor, grad, params):
 
 def logsigmoid(inpt):
     x = inpt.data
-    xp = cp if x.__class__ is cp_ndarray else np
+    xp = cp if x.__class__ is cparray else np
     value = x * (x < 0) - xp.log1p(xp.exp(-xp.abs(x)))
     output = build_links(value, inpt.requires_grad, logsigmoid, inpt)
     return output
@@ -364,7 +364,7 @@ def logsigmoid(inpt):
 
 @register_gradients(logsigmoid)
 def backward(tensor: Tensor, grad, params):
-    xp = cp if grad.__class__ is cp_ndarray else np
+    xp = cp if grad.__class__ is cparray else np
     inputs = tensor.parents
     if inputs[0].requires_grad:
         x = inputs[0].data
@@ -386,7 +386,7 @@ def linear(inpt: Tensor, weight: Tensor, bias=None):
 
 @register_gradients(linear)
 def backward(tensor: Tensor, grad, params):
-    xp = cp if grad.__class__ is cp_ndarray else np
+    xp = cp if grad.__class__ is cparray else np
     inputs = tensor.parents
     x = inputs[0]  # input
     weight = inputs[1]  # weight
@@ -409,7 +409,7 @@ def pad(inpt, padding, mode='constant', value=0.0):
     assert len(padding) % 2 == 0, "Padding length must be divisible by 2"
     assert len(padding) // 2 <= inpt.dim(), "Padding length too large"
     x = inpt.data
-    xp = cp if x.__class__ is cp_ndarray else np
+    xp = cp if x.__class__ is cparray else np
     padding_dims = len(padding) // 2  # number of dimensions that needs padding
     pad_width = tuple((0, 0) if i >= padding_dims else padding[(2 * i):(2 * i + 2)] for i in reversed(range(x.ndim)))
     if mode == 'constant':
@@ -815,7 +815,7 @@ def conv2d(inpt, weight, bias, stride, padding, dilation, groups):
             'Given groups={}, weight of size {}, expected input{} to have {} channels, but got {} channels instead'.format(
                 groups, weight.shape, inpt.shape, groups * weight.shape[-3], inpt.shape[-3]))
 
-    xp = cp if x_data.__class__ is cp_ndarray else np
+    xp = cp if x_data.__class__ is cparray else np
     weight_data = weight.data
     requires_grad = weight.requires_grad | inpt.requires_grad
     value, weight_dilated_or_x_padded = _conv2d(xp, x_data, weight_data, stride, padding, dilation, groups,
@@ -830,7 +830,7 @@ def conv2d(inpt, weight, bias, stride, padding, dilation, groups):
 
 @register_gradients(conv2d)
 def backward(tensor: Tensor, grad, params):
-    xp = cp if grad.__class__ is cp_ndarray else np
+    xp = cp if grad.__class__ is cparray else np
     inputs = tensor.parents
     stride = params['stride']
     padding = params['padding']
@@ -884,7 +884,7 @@ def conv_transpose2d(inpt, weight, bias, stride, padding, output_padding, groups
             'Given transposed=1, weight of size {}, expected input {} to have {} channels, but got {} channels instead'.format(
                 weight.shape, inpt.shape, weight.shape[-4], inpt.shape[-3]))
 
-    xp = cp if x_data.__class__ is cp_ndarray else np
+    xp = cp if x_data.__class__ is cparray else np
     weight_data = weight.data
     requires_grad = weight.requires_grad | inpt.requires_grad
     if fft_conv:
@@ -910,7 +910,7 @@ def conv_transpose2d(inpt, weight, bias, stride, padding, output_padding, groups
 
 @register_gradients(conv_transpose2d)
 def backward(tensor: Tensor, grad, params):
-    xp = cp if grad.__class__ is cp_ndarray else np
+    xp = cp if grad.__class__ is cparray else np
     inputs = tensor.parents
     stride = params['stride']
     padding = params['padding']
@@ -991,7 +991,7 @@ def max_pool2d(inpt, kernel_size, stride, padding, dilation, ceil_mode, return_i
     if inpt.ndim != 3 and inpt.ndim != 4:
         raise RuntimeError('non-empty 3D or 4D (batch mode) tensor expected for input')
     x = inpt.data
-    xp = cp if x.__class__ is cp_ndarray else np
+    xp = cp if x.__class__ is cparray else np
     value, pos = _max_pool2d(xp, inpt.data, kernel_size, stride, padding, dilation, ceil_mode)
     output = build_links(value, inpt.requires_grad, max_pool2d, inpt, pos=pos, kernel_size=kernel_size, stride=stride,
                          padding=padding, dilation=dilation, ceil_mode=ceil_mode)
@@ -1000,7 +1000,7 @@ def max_pool2d(inpt, kernel_size, stride, padding, dilation, ceil_mode, return_i
 
 @register_gradients(max_pool2d)
 def backward(tensor: Tensor, grad, params):
-    xp = cp if grad.__class__ is cp_ndarray else np
+    xp = cp if grad.__class__ is cparray else np
     inputs = tensor.parents
     pos = params['pos']
     kernel_size = params['kernel_size']
@@ -1020,7 +1020,7 @@ def dropout(inpt: Tensor, p=0.5, training=True, inplace=False):
     if p < 0.0 or p > 1.0:
         raise ValueError("dropout probability has to be between 0 and 1, " "but got {}".format(p))
     x = inpt.data
-    xp = cp if x.__class__ is cp_ndarray else np
+    xp = cp if x.__class__ is cparray else np
     if training and p > 0.0:  # if not training or if p == 0., return the incoming tensor as it is.
         mask = xp.random.binomial(1, 1 - p, size=x.shape)
         if inplace:
@@ -1043,7 +1043,7 @@ def backward(tensor: Tensor, grad, params):
     p = params['p']
     mask = params['mask']
     x = inputs[0]
-    xp = cp if grad.__class__ is cp_ndarray else np
+    xp = cp if grad.__class__ is cparray else np
     if x.requires_grad:
         x.grad += xp.multiply(grad, mask, dtype=grad.dtype) / (1 - p * (p != 1.))
 
@@ -1065,7 +1065,7 @@ def batch_norm(inpt, running_mean, running_var, weight, bias, training, momentum
 
     # expand_dim(running_mean, running_var, weight, bias)
     x = inpt.data
-    xp = cp if x.__class__ is cp_ndarray else np
+    xp = cp if x.__class__ is cparray else np
     axis = (0,) + tuple(range(2, x.ndim))
     shape = (x.shape[0],) + x.shape[2:]
     if training:
@@ -1122,7 +1122,7 @@ def layer_norm(inpt, normalized_shape, weight, bias, eps):
         raise RuntimeError(
             f'Given normalized_shape={normalized_shape}, expected input with shape (*, {", ".join([str(_) for _ in normalized_shape])}), but got input of size{inpt.shape}')
     x = inpt.data
-    xp = cp if x.__class__ is cp_ndarray else np
+    xp = cp if x.__class__ is cparray else np
     axis = tuple(-i for i in range(1, 1 + len(normalized_shape)))
     shape = x.shape[-len(normalized_shape):]
     layer_mean = xp.mean(x, axis=axis, keepdims=True)
@@ -1148,7 +1148,7 @@ def layer_norm(inpt, normalized_shape, weight, bias, eps):
 
 @register_gradients(batch_norm, layer_norm)
 def backward(tensor: Tensor, grad, params):
-    xp = cp if grad.__class__ is cp_ndarray else np
+    xp = cp if grad.__class__ is cparray else np
     inputs = tensor.parents
     axis = params['axis']
     shape = params['shape']
@@ -1193,7 +1193,7 @@ def embedding(inpt, weight, padding_idx=None, max_norm=None, norm_type=2.0, scal
     else:
         padding_idx = -1
 
-    xp = cp if inpt.data.__class__ is cp_ndarray else np
+    xp = cp if inpt.data.__class__ is cparray else np
     # renorm if max_norm is not None
     indices, counts = None, None
     if max_norm is not None:
@@ -1211,7 +1211,7 @@ def embedding(inpt, weight, padding_idx=None, max_norm=None, norm_type=2.0, scal
 
 @register_gradients(embedding)
 def backward(tensor: Tensor, grad, params):
-    xp = cp if grad.__class__ is cp_ndarray else np
+    xp = cp if grad.__class__ is cparray else np
     inpt = params['inpt']
     padding_idx = params['padding_idx']  # can be None
     scale_grad_by_freq = params['scale_grad_by_freq']  # bool
@@ -1419,7 +1419,7 @@ def multi_head_attention_forward(query, key, value, embed_dim_to_check, num_head
     if add_zero_attn:
         # (bsz*num_head,src,head_dim)->(bsz*num_head,src+1,head_dim)
         zero_attn_shape = (bsz * num_heads, 1, head_dim)
-        xp = cp if k.data.__class__ is cp_ndarray else np
+        xp = cp if k.data.__class__ is cparray else np
         k = cat([k, Tensor(xp.zeros(zero_attn_shape, dtype=k.dtype), copy=False)], dim=1)
         v = cat([v, Tensor(xp.zeros(zero_attn_shape, dtype=v.dtype), copy=False)], dim=1)
         if attn_mask is not None:

@@ -1,5 +1,5 @@
 import tortto
-from tortto import np, cp, cp_ndarray, _int_zero
+from tortto import np, cp, cparray, nparray,_int_zero
 from .VariableFunctions import *
 from .autograd.grad_fcn import *
 from .autograd.grad_fcn import _slice, _view, _repeat, _expand, _cuda, _cpu
@@ -20,19 +20,21 @@ default_dtype = {int64, float32, complex64, np.bool_}
 
 class Tensor:
     def __init__(self, data, requires_grad=False, dtype=float32, copy=True):
-        if data.__class__ is cp_ndarray:
-            data = cp.array(data, dtype=dtype, copy=copy)
+        if data.__class__ is cparray:
+            data = cparray(data, dtype=dtype, copy=copy)
         else:
-            data = np.array(data, dtype=dtype, copy=copy)
-
+            data = nparray(data, dtype=dtype, copy=copy)
         self.data = data
-        self.parents = []
+        self.parents = [] # list of Pair objects, that stores input tensors and their versions when used as inputs.
+        self.myself = None # None or a Pair object, that stores self and version when this tensor is the output.
         self.children = set()
         self.grad = _int_zero
         self.grad_fn = None
         self.grad_fn_param = None
         self.requires_grad = requires_grad
-
+    @property
+    def _version(self):
+        return self.data._version
     @property
     def requires_grad(self):
         return self._requires_grad
@@ -76,7 +78,7 @@ class Tensor:
 
     @property
     def device(self):
-        if self.data.__class__ is cp_ndarray:
+        if self.data.__class__ is cparray:
             return self.data.device
         else:
             return 'cpu'
@@ -145,7 +147,7 @@ class Tensor:
 
     def numpy(self):
         data = self.data
-        if data.__class__ is cp_ndarray:
+        if data.__class__ is cparray:
             raise TypeError(
                 f"can't convert {self.device} device type tensor to numpy. Use Tensor.cpu() to copy the tensor to host memory first.")
         if self.requires_grad:
@@ -156,7 +158,7 @@ class Tensor:
         """
         different from pytorch: tortto `contiguous` does it inplace.
         """
-        xp = cp if self.data.__class__ is cp_ndarray else np
+        xp = cp if self.data.__class__ is cparray else np
         self.data = xp.ascontiguousarray(self.data)
         return self
 
@@ -186,7 +188,7 @@ class Tensor:
         return f'tensor({s}{device}{dtype}{grad_fn}{requires_grad})'
 
     def __add__(self, other):
-        xp = cp if self.data.__class__ is cp_ndarray else np
+        xp = cp if self.data.__class__ is cparray else np
         if other.__class__ in Number:
             other = Tensor(xp.array(other), dtype=self.dtype)
         return compute_ufunc(xp.add, self, other)
@@ -194,23 +196,23 @@ class Tensor:
     __radd__ = __add__
 
     def __neg__(self):
-        xp = cp if self.data.__class__ is cp_ndarray else np
+        xp = cp if self.data.__class__ is cparray else np
         return compute_ufunc(xp.negative, self)
 
     def __sub__(self, other):
-        xp = cp if self.data.__class__ is cp_ndarray else np
+        xp = cp if self.data.__class__ is cparray else np
         if other.__class__ in Number:
             other = Tensor(xp.array(other), dtype=self.dtype)
         return compute_ufunc(xp.subtract, self, other)
 
     def __rsub__(self, other):
-        xp = cp if self.data.__class__ is cp_ndarray else np
+        xp = cp if self.data.__class__ is cparray else np
         if other.__class__ in Number:
             other = Tensor(xp.array(other), dtype=self.dtype)
         return compute_ufunc(xp.subtract, other, self)
 
     def __mul__(self, other):
-        xp = cp if self.data.__class__ is cp_ndarray else np
+        xp = cp if self.data.__class__ is cparray else np
         if other.__class__ in Number:
             other = Tensor(xp.array(other), dtype=self.dtype)
         return compute_ufunc(xp.multiply, self, other)
@@ -218,25 +220,25 @@ class Tensor:
     __rmul__ = __mul__
 
     def __truediv__(self, other):
-        xp = cp if self.data.__class__ is cp_ndarray else np
+        xp = cp if self.data.__class__ is cparray else np
         if other.__class__ in Number:
             other = Tensor(xp.array(other), dtype=self.dtype)
         return compute_ufunc(xp.divide, self, other)
 
     def __rtruediv__(self, other):
-        xp = cp if self.data.__class__ is cp_ndarray else np
+        xp = cp if self.data.__class__ is cparray else np
         if other.__class__ in Number:
             other = Tensor(xp.array(other), dtype=self.dtype)
         return compute_ufunc(xp.divide, other, self)
 
     def __pow__(self, other):  # i.e. Tensor**3
-        xp = cp if self.data.__class__ is cp_ndarray else np
+        xp = cp if self.data.__class__ is cparray else np
         if other.__class__ in Number:
             other = Tensor(xp.array(other), dtype=self.dtype)
         return compute_ufunc(xp.power, self, other)
 
     def __rpow__(self, other):  # i.e. 3**Tensor
-        xp = cp if self.data.__class__ is cp_ndarray else np
+        xp = cp if self.data.__class__ is cparray else np
         if other.__class__ in Number:
             other = Tensor(xp.array(other), dtype=self.dtype)
         return compute_ufunc(xp.power, other, self)
@@ -261,8 +263,7 @@ class Tensor:
         #     key = tuple([(slice(i,i+1,None) if i.__class__ is int else i) for i in key])
         return _slice(self, key)
 
-    def __setitem__(self, key, value):
-        self.data[key] = value
+
 
     def __array__(self, dtype=None):
         """
@@ -377,9 +378,9 @@ class Tensor:
 
     def backward(self, gradient=None):
         if gradient is None:
-            xp = cp if self.data.__class__ is cp_ndarray else np
+            xp = cp if self.data.__class__ is cparray else np
             gradient = xp.expand_dims(xp.array(1, dtype=self.dtype), axis=tuple(range(self.ndim)))
-        if isinstance(gradient, Tensor):
+        elif isinstance(gradient, Tensor):
             gradient = gradient.data
         if self.data.shape != gradient.shape:
             raise RuntimeError(
@@ -414,4 +415,21 @@ class Tensor:
                 if parent_counts[child] == 0:
                     child.grad = _int_zero
                     child.parents = []
+                    child.myself = None
             node.children = set()
+
+
+    @inplace_precheck
+    def __setitem__(self, key, value):
+        print(key)
+        ...
+
+    # no need for inplace check, as it calls __setitem__
+    def normal_(self):
+        self[...]=...
+
+
+    def uniform_(self):
+        self[...]=...
+    def fill_(self):
+        self[...]=...

@@ -109,7 +109,7 @@ class Module:
         for name, param in self._parameters.items():
             if param is not None:
                 param_data = param.data
-                if param_data.__class__ is cp_ndarray:
+                if param_data.__class__ is cparray:
                     destination[prefix + name] = param_data.get()
                 else:
                     destination[prefix + name] = param_data
@@ -117,7 +117,7 @@ class Module:
         for name, buf in self._buffers.items():
             if buf is not None:
                 buf_data = buf.data
-                destination[prefix + name] = buf_data.get() if buf_data.__class__ is cp_ndarray else buf_data
+                destination[prefix + name] = buf_data.get() if buf_data.__class__ is cparray else buf_data
 
     def state_dict(self, destination=None, prefix=''):
         if destination is None:

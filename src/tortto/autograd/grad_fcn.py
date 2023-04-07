@@ -1,18 +1,18 @@
-from tortto import np, cp, cp_ndarray, cupy_is_loaded, _int_zero
+from tortto import np, cp, cparray, cupy_is_loaded, _int_zero
 from .helper import *
 
 buildin_sum = sum
 
 
 def transpose(x, axes=None):
-    xp = cp if x.data.__class__ is cp_ndarray else np
+    xp = cp if x.data.__class__ is cparray else np
     output = build_links(xp.transpose(x.data, axes), x.requires_grad, transpose, x, axes=axes)
     return output
 
 
 @register_gradients(transpose)
 def backward(tensor, grad, params):
-    xp = cp if grad.__class__ is cp_ndarray else np
+    xp = cp if grad.__class__ is cparray else np
     inputs = tensor.parents
     if inputs[0].requires_grad:
         if params is None:
@@ -95,7 +95,7 @@ def sum(x, dim=None, keepdims=False):
     # if axis is None and keepdims is False:
     #     raise RuntimeError('taking sum of all axes, but keepdims is False.')
     x_data=x.data
-    xp = cp if x_data.__class__ is cp_ndarray else np
+    xp = cp if x_data.__class__ is cparray else np
     if dim is None:
         dim=tuple(range(x_data.ndim))
     if isinstance(dim, int):
@@ -107,7 +107,7 @@ def sum(x, dim=None, keepdims=False):
 
 @register_gradients(sum)
 def backward(tensor, grad, params):
-    xp = cp if grad.__class__ is cp_ndarray else np
+    xp = cp if grad.__class__ is cparray else np
     inputs = tensor.parents
     if inputs[0].requires_grad:
         x = inputs[0].data
@@ -128,7 +128,7 @@ def mean(x, dim=None, keepdims=False):
     # if axis is None and keepdims is False:
     #     raise RuntimeError('taking mean of all axes, but keepdims is False.')
     x_data = x.data
-    xp = cp if x_data.__class__ is cp_ndarray else np
+    xp = cp if x_data.__class__ is cparray else np
     if dim is None:
         dim=tuple(range(x_data.ndim))
     if isinstance(dim, int):
@@ -140,11 +140,11 @@ def mean(x, dim=None, keepdims=False):
 
 @register_gradients(mean)
 def backward(tensor, grad, params):
-    xp = cp if grad.__class__ is cp_ndarray else np
+    xp = cp if grad.__class__ is cparray else np
     inputs = tensor.parents
     if inputs[0].requires_grad:
         x = inputs[0].data
-        if params is None:  # if axis is None, repeat grad in all dimensions of x.shape
+        if params['dim'] is None:  # if axis is None, repeat grad in all dimensions of x.shape
             inputs[0].grad += xp.lib.stride_tricks.as_strided(xp.divide(grad, x.size, dtype=grad.dtype), shape=x.shape, strides=[0 for _ in x.shape])
         else:
             dim = params['dim']
@@ -163,7 +163,7 @@ def var(x, dim=None, unbiased=True, keepdims=False):
     # if axis is None and keepdims is False:
     #     raise RuntimeError('taking var of all axes, but keepdims is False.')
     x_data = x.data
-    xp = cp if x_data.__class__ is cp_ndarray else np
+    xp = cp if x_data.__class__ is cparray else np
     if dim is None:
         dim=tuple(range(x_data.ndim))
     if isinstance(dim, int):
@@ -176,7 +176,7 @@ def var(x, dim=None, unbiased=True, keepdims=False):
 
 @register_gradients(var)
 def backward(tensor, grad, params):
-    xp = cp if grad.__class__ is cp_ndarray else np
+    xp = cp if grad.__class__ is cparray else np
     inputs = tensor.parents
     if inputs[0].requires_grad:
         dim = params['dim']
@@ -196,7 +196,7 @@ def backward(tensor, grad, params):
 
 
 def cat(tensors, dim=0):
-    xp = cp if tensors[0].data.__class__ is cp_ndarray else np
+    xp = cp if tensors[0].data.__class__ is cparray else np
     requires_grad = any(t.requires_grad for t in tensors)
     tensors_data = tuple(t.data for t in tensors)
     indices = np.cumsum([t.shape[dim] for t in tensors_data])
@@ -207,7 +207,7 @@ def cat(tensors, dim=0):
 
 @register_gradients(cat)
 def backward(tensor, grad, params):
-    xp = cp if grad.__class__ is cp_ndarray else np
+    xp = cp if grad.__class__ is cparray else np
     inputs = tensor.parents
     axis = params['axis']
     indices = params['indices']
@@ -223,7 +223,7 @@ def _slice(x, key):
 
 @register_gradients(_slice)
 def backward(tensor, grad, params):
-    xp = cp if grad.__class__ is cp_ndarray else np
+    xp = cp if grad.__class__ is cparray else np
     inputs = tensor.parents
     if inputs[0].requires_grad:
         if inputs[0].grad is _int_zero:
@@ -272,7 +272,7 @@ def split(x, split_size_or_sections, dim=0):
 
 
 def _cuda(x):
-    if x.data.__class__ is cp_ndarray:
+    if x.data.__class__ is cparray:
         return x
     else:
         if not cupy_is_loaded:
@@ -289,7 +289,7 @@ def backward(tensor, grad, params):
 
 
 def _cpu(x):
-    if x.data.__class__ is cp_ndarray:
+    if x.data.__class__ is cparray:
         value = x.data.get()
         return build_links(value, x.requires_grad, _cpu, x)
     else:
@@ -305,7 +305,7 @@ def backward(tensor, grad, params):
 
 def _repeat(x, *sizes):
     x_data = x.data
-    xp = cp if x_data.__class__ is cp_ndarray else np
+    xp = cp if x_data.__class__ is cparray else np
     value = xp.tile(x_data, sizes)
     return build_links(value, x.requires_grad, _repeat, x, sizes=sizes, x_shape=x_data.shape)
 
@@ -336,6 +336,7 @@ def backward(tensor, grad, params):
 
 
 def _expand(x, *dims):
+    print('hello')
     x_data = x.data
     x_shape = x_data.shape
     leading_dim = len(dims) - len(x_shape)
@@ -345,7 +346,7 @@ def _expand(x, *dims):
     dims[~singleton] = x_shape[~singleton]  # new shape
     strides = np.array((0,) * leading_dim + x_data.strides)
     strides[singleton] = 0
-    xp = cp if x_data.__class__ is cp_ndarray else np
+    xp = cp if x_data.__class__ is cparray else np
     value = xp.lib.stride_tricks.as_strided(x_data, shape=dims, strides=strides)
     return build_links(value, x.requires_grad, _expand, x, sum_axes=tuple(np.arange(len(dims))[singleton]),
                        leading_dim=tuple(range(leading_dim)))
@@ -373,7 +374,7 @@ def squeeze(x, dim=None):
         value = x_data.copy()
         unchanged = True
     else:
-        xp = cp if x_data.__class__ is cp_ndarray else np
+        xp = cp if x_data.__class__ is cparray else np
         value = xp.squeeze(x_data, dim)
     return build_links(value, x.requires_grad, squeeze, x, dim=dim, unchanged=unchanged)
 
@@ -386,14 +387,14 @@ def backward(tensor, grad, params):
         if unchanged:
             inputs[0].grad += grad
         else:
-            xp = cp if grad.__class__ is cp_ndarray else np
+            xp = cp if grad.__class__ is cparray else np
             dim = params['dim']  # dim is a tuple
             inputs[0].grad += xp.expand_dims(grad, dim)
 
 
 def unsqueeze(x, dim):
     x_data = x.data
-    xp = cp if x_data.__class__ is cp_ndarray else np
+    xp = cp if x_data.__class__ is cparray else np
     value = xp.expand_dims(x_data, dim)
     return build_links(value, x.requires_grad, unsqueeze, x, dim=dim)
 
@@ -403,13 +404,13 @@ def backward(tensor, grad, params):
     inputs = tensor.parents
     if inputs[0].requires_grad:
         dim = params['dim']
-        xp = cp if grad.__class__ is cp_ndarray else np
+        xp = cp if grad.__class__ is cparray else np
         inputs[0].grad += xp.squeeze(grad, dim)
 
 
 def masked_fill(x, mask, val):
     value = x.data.copy()
-    xp = cp if value.__class__ is cp_ndarray else np
+    xp = cp if value.__class__ is cparray else np
     mask = xp.lib.stride_tricks.as_strided(mask.data, shape=value.shape,
                                            strides=(0,) * (value.ndim - mask.ndim) + mask.strides)
     value[mask] = val
@@ -421,7 +422,7 @@ def backward(tensor, grad, params):
     inputs = tensor.parents
     if inputs[0].requires_grad:
         mask = ~params['mask']  # take not to mask, take grad that are not masked
-        xp = cp if grad.__class__ is cp_ndarray else np
+        xp = cp if grad.__class__ is cparray else np
         if inputs[0].grad is _int_zero:
             value = xp.zeros_like(grad)
             value[mask] = grad[mask]

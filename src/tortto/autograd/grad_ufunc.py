@@ -1,15 +1,156 @@
-from tortto import np, cp, cp_ndarray
+from tortto import np, cp, cparray
 from .helper import *
+"""
+t means tensor object: xt, yt are tensors.
+d means tensor data: xd, yd are .data attribute of xt and yt.
+"""
+#####################################
+## requires output during backward ##
+#####################################
+def sqrt(xt):
+    xd = xt.data
+    xp = cp if xd.__class__ is cparray else np
+    return compute_ufunc(xp.sqrt, xt)
+@inplace_precheck
+def sqrt_(xt):
+    xd=xt.data
+    xp = cp if xd.__class__ is cparray else np
+    return compute_ufunc(xp.sqrt, xt, out=xd)
+
+@register_gradients(np.sqrt, cp.sqrt)
+def backward(yt, grad, params):
+    xp = cp if grad.__class__ is cparray else np
+    p0 = yt.parents[0]
+    xt = p0.tensor
+    if xt.requires_grad:
+        yd = yt.myself.get_data()
+        xt.grad += grad * xp.multiply(yd, 0.5, dtype=yd.dtype)
+
+def exp(xt):
+    xd = xt.data
+    xp = cp if xd.__class__ is cparray else np
+    return compute_ufunc(xp.exp, xt)
+@inplace_precheck
+def exp_(xt):
+    xd = xt.data
+    xp = cp if xd.__class__ is cparray else np
+    return compute_ufunc(xp.exp, xt, out=xd)
+
+@register_gradients(np.exp, cp.exp)
+def backward(yt, grad, params):
+    p0 = yt.parents[0]
+    xt=p0.tensor
+    if xt.requires_grad:
+        yd = yt.myself.get_data()
+        xt.grad += grad * yd
+
+
+def tan(xt):
+    xd = xt.data
+    xp = cp if xd.__class__ is cparray else np
+    return compute_ufunc(xp.tan, xt)
+@inplace_precheck
+def tan_(xt):
+    xd = xt.data
+    xp = cp if xd.__class__ is cparray else np
+    return compute_ufunc(xp.tan, xt, out=xd)
+
+@register_gradients(np.tan, cp.tan)
+def backward(yt, grad, params):
+    xp = cp if grad.__class__ is cparray else np
+    p0 = yt.parents[0]
+    xt=p0.tensor
+    if xt.requires_grad:
+        yd = yt.myself.get_data()
+        xt.grad += grad * xp.add(1, yd * yd, dtype=yd.dtype)
+
+def tanh(xt):
+    xd = xt.data
+    xp = cp if xd.__class__ is cparray else np
+    return compute_ufunc(xp.tanh, xt)
+
+@inplace_precheck
+def tanh_(xt):
+    xd = xt.data
+    xp = cp if xd.__class__ is cparray else np
+    return compute_ufunc(xp.tanh, xt, out=xd)
+
+@register_gradients(np.tanh, cp.tanh)
+def backward(yt, grad, params):
+    xp = cp if grad.__class__ is cparray else np
+    p0 = yt.parents[0]
+    xt=p0.tensor
+    if xt.requires_grad:
+        yd = yt.myself.get_data()
+        xt.grad += grad * xp.subtract(1, yd * yd, dtype=yd.dtype)
+
+
+def sigmoid(xt):
+    xd = xt.data
+    xp = cp if xd.__class__ is cparray else np
+    value=xp.exp(-xp.logaddexp(0,-xd))
+    output = build_links(value, xt.requires_grad, sigmoid, xt)
+    return output
+
+@inplace_precheck
+def sigmoid_(xt):
+    xd = xt.data
+    xp = cp if xd.__class__ is cparray else np
+    value = xp.exp(-xp.logaddexp(0,-xd, out=xd), out=xd)
+    output = build_links(value, xt.requires_grad, sigmoid, xt)
+    return output
+
+
+@register_gradients(sigmoid)
+def backward(yt, grad, params):
+    xp = cp if grad.__class__ is cparray else np
+    p0 = yt.parents[0]
+    xt=p0.tensor
+    if xt.requires_grad:
+        yd = yt.myself.get_data()
+        xt.grad += grad * yd * xp.subtract(1, yd, dtype=grad.dtype)
+
+###################################
+## requires none during backward ##
+###################################
+@register_gradients(np.negative,cp.negative)
+def backward(yt, grad, params):
+    xt = yt.parents[ind][0][0]
+    if xt.requires_grad:
+        xt.grad += -grad
+@register_gradients(np.add, cp.add)
+def backward(yt, grad, params):
+    parent_group=yt.parents[ind]
+    x0t, x1t = parent_group[0][0],parent_group[1][0]
+    if x0t.requires_grad:
+        x0t.grad += reverse_broadcast(grad, x0t.shape)
+    if x1t.requires_grad:
+        x1t.grad += reverse_broadcast(grad, x1t.shape)
+
+
+@register_gradients(np.subtract, cp.subtract)
+def backward(yt, grad, params):
+    parent_group = yt.parents[ind]
+    x0t, x1t = parent_group[0][0], parent_group[1][0]
+    if x0t.requires_grad:
+        x0t.grad += reverse_broadcast(grad, x0t.shape)
+    if x1t.requires_grad:
+        x1t.grad += -reverse_broadcast(grad, x1t.shape)
+
+
+###########################################
+## requires input values during backward ##
+###########################################
 
 
 def sin(x):
-    xp = cp if x.data.__class__ is cp_ndarray else np
+    xp = cp if x.data.__class__ is cparray else np
     return compute_ufunc(xp.sin, x)
 
 
 @register_gradients(np.sin, cp.sin)
 def backward(tensor, grad, params):
-    xp = cp if grad.__class__ is cp_ndarray else np
+    xp = cp if grad.__class__ is cparray else np
     inputs = tensor.parents
     if inputs[0].requires_grad:
         x = inputs[0].data
@@ -17,81 +158,41 @@ def backward(tensor, grad, params):
 
 
 def cos(x):
-    xp = cp if x.data.__class__ is cp_ndarray else np
+    xp = cp if x.data.__class__ is cparray else np
     return compute_ufunc(xp.cos, x)
 
 
 @register_gradients(np.cos, cp.cos)
 def backward(tensor, grad, params):
-    xp = cp if grad.__class__ is cp_ndarray else np
+    xp = cp if grad.__class__ is cparray else np
     inputs = tensor.parents
     if inputs[0].requires_grad:
         x = inputs[0].data
         inputs[0].grad += -grad * xp.sin(x)
 
-
-
-def exp(x):
-    xp = cp if x.data.__class__ is cp_ndarray else np
-    return compute_ufunc(xp.exp, x)
-
-
-@register_gradients(np.exp, cp.exp)
-def backward(tensor, grad, params):
-    inputs = tensor.parents
-    if inputs[0].requires_grad:
-        inputs[0].grad += grad * tensor.data
-
-
-
 def log(x):
-    xp = cp if x.data.__class__ is cp_ndarray else np
+    xp = cp if x.data.__class__ is cparray else np
     return compute_ufunc(xp.log, x)
 
 
 @register_gradients(np.log, cp.log)
 def backward(tensor, grad, params):
-    xp = cp if grad.__class__ is cp_ndarray else np
+    xp = cp if grad.__class__ is cparray else np
     inputs = tensor.parents
     if inputs[0].requires_grad:
         inputs[0].grad += grad / inputs[0].data
 
 
-
-def tanh(x):
-    xp = cp if x.data.__class__ is cp_ndarray else np
-    return compute_ufunc(xp.tanh, x)
+def abs(x):
+    pass
 
 
-@register_gradients(np.tanh, cp.tanh)
+@register_gradients(np.abs, cp.abs)
 def backward(tensor, grad, params):
-    # tanh(x) = (exp(x) - exp(-x)) / (exp(x) + exp(-x))
-    # tanh'(x) = 1 - tanh^2(x)
-    xp = cp if grad.__class__ is cp_ndarray else np
-    inputs = tensor.parents
-    if inputs[0].requires_grad:
-        x = tensor.data
-        inputs[0].grad += grad * xp.subtract(1,  x * x, dtype=x.dtype)
+    pass
 
 
-def sigmoid(x):
-    xp = cp if x.data.__class__ is cp_ndarray else np
-    x_data = x.data
-    dtype = x_data.dtype
-    value = xp.divide(1, xp.add(1, xp.exp(-x_data), dtype=dtype), dtype=dtype)
-    output = build_links(value, x.requires_grad, sigmoid, x)
-    return output
 
-
-@register_gradients(sigmoid)
-def backward(tensor, grad, params):
-    # sig(x) = 1 / (1 + exp(-x))
-    # sig'(x) = sig(x) * (1 - sig(x))
-    xp = cp if grad.__class__ is cp_ndarray else np
-    inputs = tensor.parents
-    if inputs[0].requires_grad:
-        x = tensor.data
-        inputs[0].grad += grad * x * xp.subtract(1, x, dtype=grad.dtype)
 
 @register_gradients(np.multiply, cp.multiply)
 def backward(tensor, grad, params):
@@ -118,7 +219,7 @@ def backward(tensor, grad, params):
 
 @register_gradients(np.power, cp.power)
 def backward(tensor, grad, params):
-    xp = cp if grad.__class__ is cp_ndarray else np
+    xp = cp if grad.__class__ is cparray else np
     inputs = tensor.parents
     base = inputs[0]
     power = inputs[1]
@@ -126,32 +227,3 @@ def backward(tensor, grad, params):
         base.grad += grad * power.data * base.data ** xp.subtract(power.data, 1, dtype=grad.dtype)
     if power.requires_grad:
         power.grad += grad * xp.log(base.data) * tensor.data
-
-
-@register_gradients(np.negative,cp.negative)
-def backward(tensor, grad, params):
-    inputs = tensor.parents
-    if inputs[0].requires_grad:
-        inputs[0].grad += -grad
-
-
-@register_gradients(np.add, cp.add)
-def backward(tensor, grad, params):
-    inputs = tensor.parents
-    inpt0 = inputs[0]
-    inpt1 = inputs[1]
-    if inpt0.requires_grad:
-        inpt0.grad += reverse_broadcast(grad, inpt0.shape)
-    if inpt1.requires_grad:
-        inpt1.grad += reverse_broadcast(grad, inpt1.shape)
-
-
-@register_gradients(np.subtract, cp.subtract)
-def backward(tensor, grad, params):
-    inputs = tensor.parents
-    inpt0 = inputs[0]
-    inpt1 = inputs[1]
-    if inpt0.requires_grad:
-        inpt0.grad += reverse_broadcast(grad, inpt0.shape)
-    if inpt1.requires_grad:
-        inpt1.grad += -reverse_broadcast(grad, inpt1.shape)

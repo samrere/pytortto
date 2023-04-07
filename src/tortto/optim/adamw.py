@@ -28,7 +28,7 @@ class AdamW(Optimizer):
             group.setdefault('amsgrad', False)
 
     def step(self):
-        xp = cp if self.param_groups[0]['params'][0].data.__class__ is cp_ndarray else np
+        xp = cp if self.param_groups[0]['params'][0].data.__class__ is cparray else np
         for group in self.param_groups:
             params_with_grad = []
             grads = []

@@ -2,21 +2,13 @@ import warnings
 from typing import Union, Tuple
 
 import tortto as tt
-from tortto import np, cp, cp_ndarray
+from tortto import np, cp, cparray
 
 
 def manual_seed(seed):
     np.random.seed(seed)
     cp.random.seed(seed)
 
-
-# def to_array(arr):
-#     if cp.__name__=='cupy':
-#         return cp.array(arr)
-#     else: # if uses numpy
-#         if not isinstance(arr,np_ndarray): # if incoming array is cupy array
-#             return arr.get()
-#     return arr
 
 def _values_like(fcn, tensor, **kwargs):
     dtype = kwargs.get('dtype')
@@ -30,7 +22,7 @@ def _values(fcn, shape, dtype=np.float32, **kwargs):
 
 
 def randn_like(tensor, **kwargs):
-    xp = cp if tensor.data.__class__ is cp_ndarray else np
+    xp = cp if tensor.data.__class__ is cparray else np
     return tt.Tensor(xp.random.randn(*tensor.shape), dtype=tensor.dtype, copy=False, **kwargs)
 
 
@@ -47,17 +39,17 @@ def ones(shape: Union[int, Tuple], **kwargs):
 
 
 def empty_like(tensor, **kwargs):
-    xp = cp if tensor.data.__class__ is cp_ndarray else np
+    xp = cp if tensor.data.__class__ is cparray else np
     return _values_like(xp.empty_like, tensor, **kwargs)
 
 
 def zeros_like(tensor, **kwargs):
-    xp = cp if tensor.data.__class__ is cp_ndarray else np
+    xp = cp if tensor.data.__class__ is cparray else np
     return _values_like(xp.zeros_like, tensor, **kwargs)
 
 
 def ones_like(tensor, **kwargs):
-    xp = cp if tensor.data.__class__ is cp_ndarray else np
+    xp = cp if tensor.data.__class__ is cparray else np
     return _values_like(xp.ones_like, tensor, **kwargs)
 
 
@@ -68,8 +60,8 @@ def randn(*shape, **kwargs):
     return output
 
 
-def eye(N, M=None, k=0):
-    return tt.Tensor(np.eye(N, M, k))
+def eye(N, M=None, k=0, **kwargs):
+    return tt.Tensor(np.eye(N, M, k), **kwargs)
 
 
 def arange(start, end=None, step=1, **kwargs):
@@ -92,8 +84,8 @@ def tensor(data, requires_grad=False, dtype=None, copy=True):
 
 
 def flatten(x, start_dim=0, end_dim=-1):
-    # convert neg indices to positive, making end_dim inclusive
     shape = x.shape
+    # convert neg indices to positive, making end_dim inclusive
     if end_dim < 0:
         end_dim = len(shape) + end_dim
     end_dim += 1  # inclusive
@@ -114,21 +106,21 @@ def flatten(x, start_dim=0, end_dim=-1):
 
 
 def logical_or(x1, x2):
-    xp = cp if x1.data.__class__ is cp_ndarray else np
+    xp = cp if x1.data.__class__ is cparray else np
     return tt.tensor(xp.logical_or(x1.data, x2.data))
 
 
 def logical_and(x1, x2):
-    xp = cp if x1.data.__class__ is cp_ndarray else np
+    xp = cp if x1.data.__class__ is cparray else np
     return tt.tensor(xp.logical_and(x1.data, x2.data))
 
 
 def logical_not(x):
-    xp = cp if x.data.__class__ is cp_ndarray else np
+    xp = cp if x.data.__class__ is cparray else np
     return tt.tensor(xp.logical_not(x.data))
 
 def logical_xor(x1, x2):
-    xp = cp if x1.data.__class__ is cp_ndarray else np
+    xp = cp if x1.data.__class__ is cparray else np
     return tt.tensor(xp.logical_xor(x1.data, x2.data))
 
 def argmax(x, dim=None, keepdim=False):

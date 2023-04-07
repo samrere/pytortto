@@ -35,7 +35,7 @@ def adam(params,  # list of tensor
          eps):
 
     if grads:
-        xp = cp if grads[0].__class__ is cp_ndarray else np
+        xp = cp if grads[0].__class__ is cparray else np
 
     for i, param in enumerate(params):
         grad = grads[i]
@@ -82,7 +82,7 @@ def adamw(params,  # list of tensor
           eps):
 
     if grads:
-        xp = cp if grads[0].__class__ is cp_ndarray else np
+        xp = cp if grads[0].__class__ is cparray else np
 
     for i, param in enumerate(params):
         grad = grads[i]

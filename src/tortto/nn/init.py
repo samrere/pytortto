@@ -3,12 +3,12 @@ import math
 from .parameter import *
 
 def _no_grad_uniform_(tensor, a, b):
-    xp = cp if tensor.data.__class__ is cp_ndarray else np
+    xp = cp if tensor.data.__class__ is cparray else np
     tensor.data = xp.random.uniform(low=a, high=b, size=tensor.shape).astype(tensor.dtype)
     return tensor
 
 def _no_grad_normal_(tensor, mean, std):
-    xp = cp if tensor.data.__class__ is cp_ndarray else np
+    xp = cp if tensor.data.__class__ is cparray else np
     tensor.data = xp.random.normal(loc=mean, scale=std, size=tensor.shape).astype(tensor.dtype)
     return tensor
 
@@ -77,7 +77,7 @@ def calculate_gain(nonlinearity, param=None):
 
 
 def kaiming_uniform_(tensor, a=0, mode='fan_in', nonlinearity='leaky_relu'):
-    xp = cp if tensor.data.__class__ is cp_ndarray else np
+    xp = cp if tensor.data.__class__ is cparray else np
     fan = _calculate_correct_fan(tensor, mode)
     gain = calculate_gain(nonlinearity, a)
     std = gain / math.sqrt(fan)

@@ -48,7 +48,7 @@ class _ConvNd(Module):
         self.reset_parameters()
 
     def reset_parameters(self):
-        xp = cp if self.weight.__class__ is cp_ndarray else np
+        xp = cp if self.weight.__class__ is cparray else np
         init.kaiming_uniform_(self.weight, a=math.sqrt(5))
         if self.bias is not None:
             fan_in, _ = init._calculate_fan_in_and_fan_out(self.weight)

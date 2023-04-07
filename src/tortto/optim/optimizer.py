@@ -108,7 +108,7 @@ class Optimizer(object):
             # saved `value` is always numpy arrays. if `value` is numpy array but `param` is cupy array,
             # convert `value` to cupy array.
             if isinstance(value, np.ndarray):
-                if isinstance(param, cp_ndarray):
+                if isinstance(param, cparray):
                     return cp.array(value)
                 else:
                     return value
