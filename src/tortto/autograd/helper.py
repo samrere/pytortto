@@ -52,8 +52,8 @@ def build_links(value, requires_grad, op, *inputs, **params):
         return output
 
     # Nones are recorded and can be duplicated (i.e. when weight and bias are both False in batch_norm)
-    output.parents.extend([None if i is None else Pair(i,i._version) for i in inputs])
-    output.myself = Pair(output, output._version)
+    output.parents.extend([None if i is None else (i,i._version) for i in inputs])
+    output.output_version = output._version
     output.grad_fn = op
     output.grad_fn_param = params
     return output
@@ -70,22 +70,19 @@ def inplace_precheck(fn):
     return wrapper
 
 
-# only used in tensor.parents and tensor.myself
-# to store a pair of tensor and their version during forward
-class Pair:
-    def __init__(self, tensor, stored_version):
-        self.tensor = tensor
-        self.stored_version = stored_version
+def get_data(tuple_or_tensor):
+    if tuple_or_tensor.__class__ is tuple:
+        tensor, version = tuple_or_tensor
+    else:
+        tensor, version=tuple_or_tensor,tuple_or_tensor.output_version
 
-    def get_data(self):
-        tensor = self.tensor
-        if tensor._version == self.stored_version:
-            return tensor.data
-        else:
-            raise RuntimeError(f'one of the variables needed for gradient computation has been modified '
-                               f'by an inplace operation: [shape: {tensor.shape}], which is the output of '
-                               f'{tensor.grad_fn.__name__}, is at version {tensor._version}; '
-                               f'expected version {self.stored_version} instead.')
+    if tensor._version == version:
+        return tensor.data
+    else:
+        raise RuntimeError(f'one of the variables needed for gradient computation has been modified '
+                           f'by an inplace operation: [shape: {tensor.shape}], which is the output of '
+                           f'{tensor.grad_fn.__name__}, is at version {tensor._version}; '
+                           f'expected version {version} instead.')
 
 
 def register_gradients(*gradients):
@@ -127,7 +124,7 @@ def count_children_and_parents(end_node):
             if pair is None:  # ignore None parents (i.e. bias is False in Linear)
                 parent_counts[node] -= 1
                 continue
-            p = pair.tensor
+            p = pair[0]
             p.children.add(node)  # link children
             if p not in child_counts:
                 child_counts[p] = 1
@@ -147,7 +144,7 @@ def toposort(end_node, child_counts):
         for pair in node.parents:
             if pair is None:
                 continue
-            p=pair.tensor
+            p=pair[0]
             if child_counts[p] == 1:
                 childless_nodes.append(p)
             else:

@@ -25,8 +25,8 @@ class Tensor:
         else:
             data = nparray(data, dtype=dtype, copy=copy)
         self.data = data
-        self.parents = [] # list of Pair objects, that stores input tensors and their versions when used as inputs.
-        self.myself = None # None or a Pair object, that stores self and version when this tensor is the output.
+        self.parents = []
+        self.output_version = None
         self.children = set()
         self.grad = _int_zero
         self.grad_fn = None
@@ -366,16 +366,6 @@ class Tensor:
         self.data = self.data.astype(dtype, copy=False)
         return self
 
-    # def clone(self):
-    #     if self._data is None:
-    #         raise NotImplementedError('Not yet supporting slice/view clone')
-    #     new = Tensor(None)
-    #     new.__dict__ = self.__dict__.copy()
-    #     new.data = xp.copy(self.data)
-    #     new.parents = []
-    #     new.children = set()
-    #     return new
-
     def backward(self, gradient=None):
         if gradient is None:
             xp = cp if self.data.__class__ is cparray else np
@@ -406,7 +396,6 @@ class Tensor:
                         f'array class assertion error during backward at {node.grad_fn.__name__}: ' \
                         f'grad is {node.grad.__class__} whereas node data is {node.data.__class__}'
                 ####################
-
                 if node.parents:  # calc. gradient if node has parents
                     GRADIENTS_REGISTRY[node.grad_fn](node, node.grad, node.grad_fn_param)
             for child in node.children:
@@ -414,8 +403,18 @@ class Tensor:
                 assert parent_counts[child] >= 0, 'negative child counts'
                 if parent_counts[child] == 0:
                     child.grad = _int_zero
-                    child.parents = []
-                    child.myself = None
+                    """
+                    keep this commented in the end after you implemented all inplace stuff
+                    and test on real examples to see if this is required.
+                    why? to allow multiple backward call on same graph:
+                        import torch
+                        x=torch.tensor([1,2,3.], requires_grad=True)
+                        y=x*2; z=x*3
+                        y.sum().backward(); print(x.grad)
+                        z.sum().backward(); print(x.grad)
+                    """
+                    # child.parents = []
+                    # child.output_version = None
             node.children = set()
 
 

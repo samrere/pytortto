@@ -20,10 +20,9 @@ def sqrt_(xt):
 @register_gradients(np.sqrt, cp.sqrt)
 def backward(yt, grad, params):
     xp = cp if grad.__class__ is cparray else np
-    p0 = yt.parents[0]
-    xt = p0.tensor
+    xt = yt.parents[0][0]
     if xt.requires_grad:
-        yd = yt.myself.get_data()
+        yd = get_data(yt)
         xt.grad += grad * xp.multiply(yd, 0.5, dtype=yd.dtype)
 
 def exp(xt):
@@ -38,10 +37,9 @@ def exp_(xt):
 
 @register_gradients(np.exp, cp.exp)
 def backward(yt, grad, params):
-    p0 = yt.parents[0]
-    xt=p0.tensor
+    xt = yt.parents[0][0]
     if xt.requires_grad:
-        yd = yt.myself.get_data()
+        yd = get_data(yt)
         xt.grad += grad * yd
 
 
@@ -58,10 +56,9 @@ def tan_(xt):
 @register_gradients(np.tan, cp.tan)
 def backward(yt, grad, params):
     xp = cp if grad.__class__ is cparray else np
-    p0 = yt.parents[0]
-    xt=p0.tensor
+    xt = yt.parents[0][0]
     if xt.requires_grad:
-        yd = yt.myself.get_data()
+        yd = get_data(yt)
         xt.grad += grad * xp.add(1, yd * yd, dtype=yd.dtype)
 
 def tanh(xt):
@@ -78,10 +75,9 @@ def tanh_(xt):
 @register_gradients(np.tanh, cp.tanh)
 def backward(yt, grad, params):
     xp = cp if grad.__class__ is cparray else np
-    p0 = yt.parents[0]
-    xt=p0.tensor
+    xt = yt.parents[0][0]
     if xt.requires_grad:
-        yd = yt.myself.get_data()
+        yd = get_data(yt)
         xt.grad += grad * xp.subtract(1, yd * yd, dtype=yd.dtype)
 
 
@@ -104,24 +100,22 @@ def sigmoid_(xt):
 @register_gradients(sigmoid)
 def backward(yt, grad, params):
     xp = cp if grad.__class__ is cparray else np
-    p0 = yt.parents[0]
-    xt=p0.tensor
+    xt = yt.parents[0][0]
     if xt.requires_grad:
-        yd = yt.myself.get_data()
+        yd = get_data(yt)
         xt.grad += grad * yd * xp.subtract(1, yd, dtype=grad.dtype)
 
-###################################
-## requires none during backward ##
-###################################
+######################################
+## requires nothing during backward ##
+######################################
 @register_gradients(np.negative,cp.negative)
 def backward(yt, grad, params):
-    xt = yt.parents[ind][0][0]
+    xt = yt.parents[0][0]
     if xt.requires_grad:
         xt.grad += -grad
 @register_gradients(np.add, cp.add)
 def backward(yt, grad, params):
-    parent_group=yt.parents[ind]
-    x0t, x1t = parent_group[0][0],parent_group[1][0]
+    x0t, x1t = yt.parents[0][0],yt.parents[1][0]
     if x0t.requires_grad:
         x0t.grad += reverse_broadcast(grad, x0t.shape)
     if x1t.requires_grad:
@@ -130,8 +124,7 @@ def backward(yt, grad, params):
 
 @register_gradients(np.subtract, cp.subtract)
 def backward(yt, grad, params):
-    parent_group = yt.parents[ind]
-    x0t, x1t = parent_group[0][0], parent_group[1][0]
+    x0t, x1t = yt.parents[0][0], yt.parents[1][0]
     if x0t.requires_grad:
         x0t.grad += reverse_broadcast(grad, x0t.shape)
     if x1t.requires_grad:
@@ -143,10 +136,15 @@ def backward(yt, grad, params):
 ###########################################
 
 
-def sin(x):
-    xp = cp if x.data.__class__ is cparray else np
-    return compute_ufunc(xp.sin, x)
-
+def sin(xt):
+    xd = xt.data
+    xp = cp if xd.__class__ is cparray else np
+    return compute_ufunc(xp.sin, xt)
+@inplace_precheck
+def sin_(xt):
+    xd = xt.data
+    xp = cp if xd.__class__ is cparray else np
+    return compute_ufunc(xp.sin, xt, params={'copy':xd.copy()})
 
 @register_gradients(np.sin, cp.sin)
 def backward(tensor, grad, params):
