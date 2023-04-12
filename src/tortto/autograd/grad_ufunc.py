@@ -210,85 +210,98 @@ subtract = sub
 ###########################################
 ## requires input values during backward ##
 ###########################################
-
-
+class Sin(Function):
+    @staticmethod
+    def forward(ctx, *inputs, **params):
+        xd=inputs[0].data
+        xp = cp if xd.__class__ is cparray else np
+        if params['inplace']:
+            result = xp.sin(xd, out=xd)
+            ctx.params = {'copy': xd.copy()}
+        else:
+            result = xp.sin(xd)
+            ctx.save_for_backward(xd)
+        return result
+    @staticmethod
+    def backward(ctx, *grad):
+        xp = cp if grad[0].__class__ is cparray else np
+        xd = ctx.params['copy'] if 'copy' in ctx.params else ctx.saved_tensors[0]
+        return grad[0] * xp.cos(xd)
 def sin(xt):
-    xd = xt.data
-    xp = cp if xd.__class__ is cparray else np
-    return compute_ufunc(xp.sin, xt)
-# @inplace_precheck
+    return Sin.apply(xt, inplace=False)
 def sin_(xt):
-    xd = xt.data
-    xp = cp if xd.__class__ is cparray else np
-    return compute_ufunc(xp.sin, xt, out=xd, params={'copy':xd.copy()})
-
-@register_gradients(np.sin, cp.sin)
-def backward(yt, grad, params):
-    xp = cp if grad.__class__ is cparray else np
-    p=yt.parents[0]
-    xt= p[0]
-    if xt.requires_grad:
-        xd = params['copy'] if 'copy' in params else  get_data(p)
-        xt.grad += grad * xp.cos(xd)
+    return Sin.apply(xt, inplace=True)
 
 
+class Cos(Function):
+    @staticmethod
+    def forward(ctx, *inputs, **params):
+        xd=inputs[0].data
+        xp = cp if xd.__class__ is cparray else np
+        if params['inplace']:
+            result = xp.cos(xd, out=xd)
+            ctx.params = {'copy': xd.copy()}
+        else:
+            result = xp.cos(xd)
+            ctx.save_for_backward(xd)
+        return result
+    @staticmethod
+    def backward(ctx, *grad):
+        xp = cp if grad[0].__class__ is cparray else np
+        xd = ctx.params['copy'] if 'copy' in ctx.params else ctx.saved_tensors[0]
+        return -grad[0] * xp.sin(xd)
 def cos(xt):
-    xd = xt.data
-    xp = cp if xd.__class__ is cparray else np
-    return compute_ufunc(xp.cos, xt)
-# @inplace_precheck
+    return Cos.apply(xt, inplace=False)
 def cos_(xt):
-    xd = xt.data
-    xp = cp if xd.__class__ is cparray else np
-    return compute_ufunc(xp.cos, xt, out=xd, params={'copy':xd.copy()})
-
-@register_gradients(np.cos, cp.cos)
-def backward(yt, grad, params):
-    xp = cp if grad.__class__ is cparray else np
-    p=yt.parents[0]
-    xt = p[0]
-    if xt.requires_grad:
-        xd = params['copy'] if 'copy' in params else  get_data(p)
-        xt.grad += -grad * xp.sin(xd)
+    return Cos.apply(xt, inplace=True)
 
 
+class Log(Function):
+    @staticmethod
+    def forward(ctx, *inputs, **params):
+        xd=inputs[0].data
+        xp = cp if xd.__class__ is cparray else np
+        if params['inplace']:
+            result = xp.log(xd, out=xd)
+            ctx.params = {'copy': xd.copy()}
+        else:
+            result = xp.log(xd)
+            ctx.save_for_backward(xd)
+        return result
+    @staticmethod
+    def backward(ctx, *grad):
+        xd = ctx.params['copy'] if 'copy' in ctx.params else ctx.saved_tensors[0]
+        return grad[0] / xd
 def log(xt):
-    xd = xt.data
-    xp = cp if xd.__class__ is cparray else np
-    return compute_ufunc(xp.log, xt)
-# @inplace_precheck
+    return Log.apply(xt, inplace=False)
 def log_(xt):
-    xd = xt.data
-    xp = cp if xd.__class__ is cparray else np
-    return compute_ufunc(xp.log, xt, out=xd, params={'copy':xd.copy()})
-
-@register_gradients(np.log, cp.log)
-def backward(yt, grad, params):
-    p=yt.parents[0]
-    xt = p[0]
-    if xt.requires_grad:
-        xd = params['copy'] if 'copy' in params else  get_data(p)
-        xt.grad += grad / xd
+    return Log.apply(xt, inplace=True)
 
 
+class Abs(Function):
+    @staticmethod
+    def forward(ctx, *inputs, **params):
+        xd = inputs[0].data
+        xp = cp if xd.__class__ is cparray else np
+        if params['inplace']:
+            result = xp.abs(xd, out=xd)
+            ctx.params = {'copy': xd.copy()}
+        else:
+            result = xp.abs(xd)
+            ctx.save_for_backward(xd)
+        return result
+    @staticmethod
+    def backward(ctx, *grad):
+        xp = cp if grad[0].__class__ is cparray else np
+        xd = ctx.params['copy'] if 'copy' in ctx.params else ctx.saved_tensors[0]
+        return grad[0] * xp.sign(xd)
 def abs(xt):
-    xd = xt.data
-    xp = cp if xd.__class__ is cparray else np
-    return compute_ufunc(xp.abs, xt)
-
+    return Abs.apply(xt, inplace=False)
+absolute = abs
 def abs_(xt):
-    xd = xt.data
-    xp = cp if xd.__class__ is cparray else np
-    return compute_ufunc(xp.abs, xt, out=xd, params={'copy': xd.copy()})
+    return Abs.apply(xt, inplace=True)
 
-@register_gradients(np.abs, cp.abs)
-def backward(yt, grad, params):
-    xp = cp if grad.__class__ is cparray else np
-    p=yt.parents[0]
-    xt = p[0]
-    if xt.requires_grad:
-        xd=params['copy'] if 'copy' in params else get_data(p)
-        xt.grad += grad * xp.sign(xd)
+
 
 
 ######################################################################################################################

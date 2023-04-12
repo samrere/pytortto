@@ -7,7 +7,7 @@ class FunctionBase(object):
     __slots__ = ['variable','to_save', 'next_functions', 'needs_input_grad','grad','params']
     def __init__(self):
         self.variable = None
-        self.to_save = [] # tuple of (tensor,version) pairs
+        self.to_save = []
         self.next_functions = None
         self.needs_input_grad = []
         self.grad=None

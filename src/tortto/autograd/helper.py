@@ -3,18 +3,15 @@ from .grad_mode import is_grad_enabled
 
 
 def get_data(pair):
-    tensor_xparray, version = pair
-
-    if tensor_xparray._version == version:
-        if tensor_xparray.__class__ is tt.Tensor:
-            return tensor_xparray.data
-        else:
-            return tensor_xparray
+    xparray, version = pair
+    assert xparray.__class__ is not tt.Tensor, 'Bug here!'
+    if xparray._version == version:
+            return xparray
     else:
-        msg='' if tensor_xparray.grad_fn is None else f', which is the output of {tensor_xparray.grad_fn.__name__},'
+        msg='' if xparray.grad_fn is None else f', which is the output of {xparray.grad_fn.__name__},'
         raise RuntimeError(f'one of the variables needed for gradient computation has been modified '
-                           f'by an inplace operation: [shape: {tensor_xparray.shape}]{msg} is at version '
-                           f'{tensor_xparray._version}; expected version {version} instead.')
+                           f'by an inplace operation: [shape: {xparray.shape}]{msg} is at version '
+                           f'{xparray._version}; expected version {version} instead.')
 
 
 def reverse_broadcast(result, target_shape: tuple):
