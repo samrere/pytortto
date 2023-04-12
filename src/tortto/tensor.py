@@ -19,19 +19,26 @@ default_dtype = {int64, float32, complex64, np.bool_}
 
 
 class Tensor:
-    def __init__(self, data, requires_grad=False, dtype=float32, copy=True):
+    def __init__(self, data, requires_grad=False, dtype=float32, copy=True, **kwargs):
         if data.__class__ is cparray:
             data = cparray(data, dtype=dtype, copy=copy)
         else:
             data = nparray(data, dtype=dtype, copy=copy)
         self.data = data
-        self.parents = []
-        self.output_version = None
-        self.children = set()
+        # self.parents = []
+
+        # self.children = set()
         self.grad = _int_zero
         self.grad_fn = None
-        self.grad_fn_param = None
+        # self.grad_fn_param = None
         self.requires_grad = requires_grad
+
+        self._output_version = kwargs.get('_output_version')
+        self._output_idx = kwargs.get('_output_idx')
+
+    ################
+    ## properties ##
+    ################
     @property
     def _version(self):
         return self.data._version
@@ -48,29 +55,6 @@ class Tensor:
             if not issubclass(dtype_type, np.complexfloating) and not issubclass(dtype_type, np.floating):
                 raise RuntimeError('only Tensors of floating point and complex dtype can require gradients')
         self._requires_grad = val
-
-    def copy_(self, array):
-        """
-        1. the input can be tensor or array instead of tensor only as in pytorch
-        2. used in module _load_from_state_dict. copy numpy array from checkpoint to tensor
-           array from checkpoint is always numpy array.
-        """
-        if isinstance(array, Tensor):
-            array = array.data
-        if self.shape != array.shape:
-            raise RuntimeError(f'The size of tensor a {self.shape} must match the size of tensor b {array.shape}')
-
-        array = array.copy()  # copy array data
-        from_class = array.__class__
-        to_class = self.data.__class__
-        if to_class is np.ndarray:
-            if from_class is not np.ndarray:
-                array = array.get()
-        else:
-            if from_class is np.ndarray:
-                array = cp.array(array)
-        self.data = array
-        return self
 
     @property
     def T(self):
@@ -103,6 +87,217 @@ class Tensor:
     def ndim(self):
         return len(self.shape)
 
+    @property
+    def itemsize(self):
+        return self.data.itemsize
+
+    @property
+    def strides(self):
+        return self.data.strides
+
+    @strides.setter
+    def strides(self, value):
+        self.data.strides = value
+
+
+    ###################################
+    ## operator overload (no grad fn)##
+    ###################################
+    def __len__(self):
+        return self.shape[0]
+
+    def __hash__(self):
+        return id(self)
+
+    def __repr__(self):
+        device = f", device='{self.device}'" if self.device != 'cpu' else ''
+        dtype = f', dtype={self.dtype}' if self.data is not None and self.dtype.type not in default_dtype else ''
+        grad_fn = f', grad_fn=<{self.grad_fn.__class__.__name__}>' if self.grad_fn else ''
+        requires_grad = f', requires_grad=True' if self.requires_grad and not self.grad_fn else ''
+        if self.data is None:
+            s = str(None)
+        else:
+            s = np.array2string(self.data, separator=', ', precision=4).replace('\n', '\n' + ' ' * 7)
+        return f'tensor({s}{device}{dtype}{grad_fn}{requires_grad})'
+    def __array__(self, dtype=None):
+        """
+        useful when setting tensor values using another tensor:
+
+        import tortto as tt
+        x=tt.randn(2,4)
+        x[:,::2]=tt.zeros((2,2))
+
+        https://numpy.org/devdocs/user/basics.dispatch.html
+        """
+        return self.data.astype(dtype, copy=False)
+
+
+    def __eq__(self, other):
+        # use default dtype (float32) not bool, because any further operations on bool will result in float64:
+        # tt.tensor([True, False], dtype=bool).mean() --> float64
+        if other.__class__ is Tensor:
+            other=other.data
+        elif other.__class__ not in Number:
+            return False
+        return tt.tensor(self.data == other, dtype=float32, copy=False)
+
+    def __ne__(self, other):
+        if other.__class__ is Tensor:
+            other = other.data
+        elif other.__class__ not in Number:
+            return True
+        return tt.tensor(self.data != other, dtype=float32, copy=False)
+    def __lt__(self, other):
+        if other.__class__ is Tensor:
+            other=other.data
+        elif other.__class__ not in Number:
+            raise TypeError(f"'<' not supported between instances of '{self.__class__}' and '{other.__class__}'")
+        return tt.tensor(self.data < other, dtype=float32, copy=False)
+    def __le__(self, other):
+        if other.__class__ is Tensor:
+            other=other.data
+        elif other.__class__ not in Number:
+            raise TypeError(f"'<=' not supported between instances of '{self.__class__}' and '{other.__class__}'")
+        return tt.tensor(self.data <= other, dtype=float32, copy=False)
+
+    def __gt__(self, other):
+        if other.__class__ is Tensor:
+            other=other.data
+        elif other.__class__ not in Number:
+            raise TypeError(f"'>' not supported between instances of '{self.__class__}' and '{other.__class__}'")
+        return tt.tensor(self.data > other, dtype=float32, copy=False)
+    def __ge__(self, other):
+        if other.__class__ is Tensor:
+            other=other.data
+        elif other.__class__ not in Number:
+            raise TypeError(f"'>=' not supported between instances of '{self.__class__}' and '{other.__class__}'")
+        return tt.tensor(self.data >= other, dtype=float32, copy=False)
+
+    ###################################
+    ## operator overload (has grad fn)##
+    ###################################
+    def __neg__(self):
+        xp = cp if self.data.__class__ is cparray else np
+        return compute_ufunc(xp.negative, self)
+
+    def __add__(self, other):
+        xp = cp if self.data.__class__ is cparray else np
+        if other.__class__ in Number:
+            other = Tensor(xp.array(other), dtype=self.dtype)
+        return compute_ufunc(xp.add, self, other)
+
+    __radd__ = __add__
+    @inplace_precheck
+    def __iadd__(self, other):
+        xp = cp if self.data.__class__ is cparray else np
+        if other.__class__ in Number:
+            other = Tensor(xp.array(other), dtype=self.dtype)
+        return compute_ufunc(xp.add, self, other, out=self.data)
+
+    add_ = __iadd__
+    add=__add__
+
+    def __sub__(self, other):
+        xp = cp if self.data.__class__ is cparray else np
+        if other.__class__ in Number:
+            other = Tensor(xp.array(other), dtype=self.dtype)
+        return compute_ufunc(xp.subtract, self, other)
+
+    @inplace_precheck
+    def __isub__(self, other):
+        xp = cp if self.data.__class__ is cparray else np
+        if other.__class__ in Number:
+            other = Tensor(xp.array(other), dtype=self.dtype)
+        return compute_ufunc(xp.subtract, self, other, out=self.data)
+
+    subtract_=__isub__
+    sub_=__isub__
+    subtract = __sub__
+    sub = __sub__
+
+    def __rsub__(self, other):
+        xp = cp if self.data.__class__ is cparray else np
+        if other.__class__ in Number:
+            other = Tensor(xp.array(other), dtype=self.dtype)
+        return compute_ufunc(xp.subtract, other, self)
+
+
+    def __mul__(self, other):
+        xp = cp if self.data.__class__ is cparray else np
+        if other.__class__ in Number:
+            other = Tensor(xp.array(other), dtype=self.dtype)
+        return compute_ufunc(xp.multiply, self, other)
+
+    __rmul__ = __mul__
+    @inplace_precheck
+    def __imul__(self, other):
+        xp = cp if self.data.__class__ is cparray else np
+        if other.__class__ in Number:
+            other = Tensor(xp.array(other), dtype=self.dtype)
+        return compute_ufunc(xp.multiply, self, other, params={'copy':self.data.copy()}, out=self.data)
+
+    multiply_ = __imul__
+    mul_=__imul__
+    multiply = __mul__
+    mul = __mul__
+
+    def __truediv__(self, other):
+        xp = cp if self.data.__class__ is cparray else np
+        if other.__class__ in Number:
+            other = Tensor(xp.array(other), dtype=self.dtype)
+        return compute_ufunc(xp.divide, self, other)
+
+    @inplace_precheck
+    def __idiv__(self, other):
+        xp = cp if self.data.__class__ is cparray else np
+        if other.__class__ in Number:
+            other = Tensor(xp.array(other), dtype=self.dtype)
+        return compute_ufunc(xp.divide, self, other, params={'copy': self.data.copy()}, out=self.data)
+
+    divide_ = __idiv__
+    div_=__idiv__
+    divide = __truediv__
+    div = __truediv__
+    def __rtruediv__(self, other):
+        xp = cp if self.data.__class__ is cparray else np
+        if other.__class__ in Number:
+            other = Tensor(xp.array(other), dtype=self.dtype)
+        return compute_ufunc(xp.divide, other, self)
+
+    def __pow__(self, other):  # i.e. Tensor**3
+        xp = cp if self.data.__class__ is cparray else np
+        if other.__class__ in Number:
+            other = Tensor(xp.array(other), dtype=self.dtype)
+        return compute_ufunc(xp.power, self, other)
+
+    def __rpow__(self, other):  # i.e. 3**Tensor
+        xp = cp if self.data.__class__ is cparray else np
+        if other.__class__ in Number:
+            other = Tensor(xp.array(other), dtype=self.dtype)
+        return compute_ufunc(xp.power, other, self)
+
+    def __matmul__(self, other):
+        return matmul(self, other)
+
+    def __getitem__(self, key):
+        # change indexing to slicing to keep dimension
+        # if key.__class__ is int:
+        #     key = slice(key, key + 1, None)
+        # else:
+        #     key = tuple([(slice(i,i+1,None) if i.__class__ is int else i) for i in key])
+        return _slice(self, key)
+
+    @inplace_precheck
+    def __setitem__(self, key, value):
+        print(key)
+        ...
+
+
+
+
+
+
+
     def dim(self):
         return self.ndim
 
@@ -120,20 +315,14 @@ class Tensor:
         # Returns the total number of elements in the input tensor.
         return self.data.size
 
-    @property
-    def itemsize(self):
-        return self.data.itemsize
 
-    @property
-    def strides(self):
-        return self.data.strides
-
-    @strides.setter
-    def strides(self, value):
-        self.data.strides = value
 
     def item(self):
         return self.data.item()
+
+    def data_ptr(self):
+        # https://docs.cupy.dev/en/latest/user_guide/interoperability.html#device-memory-pointers
+        return self.data.data.ptr if self.data.__class__ is cparray else self.data.ctypes.data
 
     def cuda(self):
         return _cuda(self)
@@ -165,86 +354,30 @@ class Tensor:
     def is_contiguous(self):
         return self.data.flags['C_CONTIGUOUS']
 
-    def __eq__(self, other):
-        if hasattr(self, 'data') and hasattr(other, 'data'):
-            # use default dtype (float32) not bool, because any further operations on bool will result in float64:
-            # tt.tensor([True, False], dtype=bool).mean() --> float64
-            return tt.tensor(self.data == other.data, dtype=float32, copy=False)
+    def copy_(self, array):
+        """
+        1. the input can be tensor or array instead of tensor only as in pytorch
+        2. used in module _load_from_state_dict. copy numpy array from checkpoint to tensor
+           array from checkpoint is always numpy array.
+        """
+        if isinstance(array, Tensor):
+            array = array.data
+        if self.shape != array.shape:
+            raise RuntimeError(f'The size of tensor a {self.shape} must match the size of tensor b {array.shape}')
+
+        array = array.copy()  # copy array data
+        from_class = array.__class__
+        to_class = self.data.__class__
+        if to_class is np.ndarray:
+            if from_class is not np.ndarray:
+                array = array.get()
         else:
-            return False
+            if from_class is np.ndarray:
+                array = cp.array(array)
+        self.data = array
+        return self
 
-    def __hash__(self):
-        return id(self)
 
-    def __repr__(self):
-        device = f", device='{self.device}'" if self.device != 'cpu' else ''
-        dtype = f', dtype={self.dtype}' if self.data is not None and self.dtype.type not in default_dtype else ''
-        grad_fn = f', grad_fn=<{self.grad_fn.__name__}Backward>' if self.grad_fn else ''
-        requires_grad = f', requires_grad=True' if self.requires_grad and not self.grad_fn else ''
-        if self.data is None:
-            s = str(None)
-        else:
-            s = np.array2string(self.data, separator=', ', precision=4).replace('\n', '\n' + ' ' * 7)
-        return f'tensor({s}{device}{dtype}{grad_fn}{requires_grad})'
-
-    def __add__(self, other):
-        xp = cp if self.data.__class__ is cparray else np
-        if other.__class__ in Number:
-            other = Tensor(xp.array(other), dtype=self.dtype)
-        return compute_ufunc(xp.add, self, other)
-
-    __radd__ = __add__
-
-    def __neg__(self):
-        xp = cp if self.data.__class__ is cparray else np
-        return compute_ufunc(xp.negative, self)
-
-    def __sub__(self, other):
-        xp = cp if self.data.__class__ is cparray else np
-        if other.__class__ in Number:
-            other = Tensor(xp.array(other), dtype=self.dtype)
-        return compute_ufunc(xp.subtract, self, other)
-
-    def __rsub__(self, other):
-        xp = cp if self.data.__class__ is cparray else np
-        if other.__class__ in Number:
-            other = Tensor(xp.array(other), dtype=self.dtype)
-        return compute_ufunc(xp.subtract, other, self)
-
-    def __mul__(self, other):
-        xp = cp if self.data.__class__ is cparray else np
-        if other.__class__ in Number:
-            other = Tensor(xp.array(other), dtype=self.dtype)
-        return compute_ufunc(xp.multiply, self, other)
-
-    __rmul__ = __mul__
-
-    def __truediv__(self, other):
-        xp = cp if self.data.__class__ is cparray else np
-        if other.__class__ in Number:
-            other = Tensor(xp.array(other), dtype=self.dtype)
-        return compute_ufunc(xp.divide, self, other)
-
-    def __rtruediv__(self, other):
-        xp = cp if self.data.__class__ is cparray else np
-        if other.__class__ in Number:
-            other = Tensor(xp.array(other), dtype=self.dtype)
-        return compute_ufunc(xp.divide, other, self)
-
-    def __pow__(self, other):  # i.e. Tensor**3
-        xp = cp if self.data.__class__ is cparray else np
-        if other.__class__ in Number:
-            other = Tensor(xp.array(other), dtype=self.dtype)
-        return compute_ufunc(xp.power, self, other)
-
-    def __rpow__(self, other):  # i.e. 3**Tensor
-        xp = cp if self.data.__class__ is cparray else np
-        if other.__class__ in Number:
-            other = Tensor(xp.array(other), dtype=self.dtype)
-        return compute_ufunc(xp.power, other, self)
-
-    def __matmul__(self, other):
-        return matmul(self, other)
 
     def sum(self, dim=None, keepdims=False):
         return sum(self, dim, keepdims)
@@ -255,30 +388,7 @@ class Tensor:
     def var(self, dim=None, unbiased=True, keepdims=False):
         return var(self, dim, unbiased, keepdims)
 
-    def __getitem__(self, key):
-        # change indexing to slicing to keep dimension
-        # if key.__class__ is int:
-        #     key = slice(key, key + 1, None)
-        # else:
-        #     key = tuple([(slice(i,i+1,None) if i.__class__ is int else i) for i in key])
-        return _slice(self, key)
 
-
-
-    def __array__(self, dtype=None):
-        """
-        useful when setting tensor values using another tensor:
-
-        import tortto as tt
-        x=tt.randn(2,4)
-        x[:,::2]=tt.zeros((2,2))
-
-        https://numpy.org/devdocs/user/basics.dispatch.html
-        """
-        return self.data.astype(dtype, copy=False)
-
-    def __len__(self):
-        return self.shape[0]
 
     def view(self, *newshape):
         if newshape[0].__class__ is not int:
@@ -399,6 +509,7 @@ class Tensor:
                 if node.parents:  # calc. gradient if node has parents
                     GRADIENTS_REGISTRY[node.grad_fn](node, node.grad, node.grad_fn_param)
             for child in node.children:
+                # child.grad = _int_zero
                 parent_counts[child] -= 1
                 assert parent_counts[child] >= 0, 'negative child counts'
                 if parent_counts[child] == 0:
@@ -418,10 +529,7 @@ class Tensor:
             node.children = set()
 
 
-    @inplace_precheck
-    def __setitem__(self, key, value):
-        print(key)
-        ...
+
 
     # no need for inplace check, as it calls __setitem__
     def normal_(self):

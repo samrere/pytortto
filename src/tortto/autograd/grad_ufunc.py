@@ -1,113 +1,139 @@
 from tortto import np, cp, cparray
 from .helper import *
+from .function import *
 """
 t means tensor object: xt, yt are tensors.
 d means tensor data: xd, yd are .data attribute of xt and yt.
 """
+
+""" checklist
+1**. use @inplace_precheck before inplace ops
+2**. for inputs that can be numpy scalar, use np.add, np.multiply etc. (np.array(1, dtype=np.float32) + 2 will be float64)
+3*. use y if possible in backward, to avoid recalculation
+4*. be careful of overflow in np.exp 
+"""
 #####################################
 ## requires output during backward ##
 #####################################
+class Sqrt(Function):
+    @staticmethod
+    def forward(ctx, *inputs, **params):
+        xd = inputs[0].data
+        xp = cp if xd.__class__ is cparray else np
+        if params['inplace']:
+            result = xp.sqrt(xd, out=xd)
+        else:
+            result = xp.sqrt(xd)
+        ctx.save_for_backward(result)
+        return result
+    @staticmethod
+    def backward(ctx, *grad):
+        yd=ctx.saved_tensors[0]
+        xp = cp if grad[0].__class__ is cparray else np
+        return grad[0]*xp.multiply(yd, 0.5, dtype=yd.dtype)
 def sqrt(xt):
-    xd = xt.data
-    xp = cp if xd.__class__ is cparray else np
-    return compute_ufunc(xp.sqrt, xt)
-@inplace_precheck
+    return Sqrt.apply(xt, inplace=False)
 def sqrt_(xt):
-    xd=xt.data
-    xp = cp if xd.__class__ is cparray else np
-    return compute_ufunc(xp.sqrt, xt, out=xd)
+    return Sqrt.apply(xt, inplace=True)
 
-@register_gradients(np.sqrt, cp.sqrt)
-def backward(yt, grad, params):
-    xp = cp if grad.__class__ is cparray else np
-    xt = yt.parents[0][0]
-    if xt.requires_grad:
-        yd = get_data(yt)
-        xt.grad += grad * xp.multiply(yd, 0.5, dtype=yd.dtype)
-
+class Exp(Function):
+    @staticmethod
+    def forward(ctx, *inputs, **params):
+        xd=inputs[0].data
+        xp = cp if xd.__class__ is cparray else np
+        if params['inplace']:
+            result = xp.exp(xd, out=xd)
+        else:
+            result = xp.exp(xd)
+        ctx.save_for_backward(result)
+        return result
+    @staticmethod
+    def backward(ctx, *grad):
+        yd=ctx.saved_tensors[0]
+        return grad[0] * yd
 def exp(xt):
-    xd = xt.data
-    xp = cp if xd.__class__ is cparray else np
-    return compute_ufunc(xp.exp, xt)
-@inplace_precheck
+    return Exp.apply(xt, inplace=False)
 def exp_(xt):
-    xd = xt.data
-    xp = cp if xd.__class__ is cparray else np
-    return compute_ufunc(xp.exp, xt, out=xd)
+    return Exp.apply(xt, inplace=True)
 
-@register_gradients(np.exp, cp.exp)
-def backward(yt, grad, params):
-    xt = yt.parents[0][0]
-    if xt.requires_grad:
-        yd = get_data(yt)
-        xt.grad += grad * yd
-
-
+class Tan(Function):
+    @staticmethod
+    def forward(ctx, *inputs, **params):
+        xd=inputs[0].data
+        xp = cp if xd.__class__ is cparray else np
+        if params['inplace']:
+            result = xp.tan(xd, out=xd)
+        else:
+            result = xp.tan(xd)
+        ctx.save_for_backward(result)
+        return result
+    @staticmethod
+    def backward(ctx, *grad):
+        xp = cp if grad[0].__class__ is cparray else np
+        yd=ctx.saved_tensors[0]
+        return grad[0] * xp.add(1, yd * yd, dtype=yd.dtype)
 def tan(xt):
-    xd = xt.data
-    xp = cp if xd.__class__ is cparray else np
-    return compute_ufunc(xp.tan, xt)
-@inplace_precheck
+    return Tan.apply(xt, inplace=False)
 def tan_(xt):
-    xd = xt.data
-    xp = cp if xd.__class__ is cparray else np
-    return compute_ufunc(xp.tan, xt, out=xd)
+    return Tan.apply(xt, inplace=True)
 
-@register_gradients(np.tan, cp.tan)
-def backward(yt, grad, params):
-    xp = cp if grad.__class__ is cparray else np
-    xt = yt.parents[0][0]
-    if xt.requires_grad:
-        yd = get_data(yt)
-        xt.grad += grad * xp.add(1, yd * yd, dtype=yd.dtype)
-
+class Tanh(Function):
+    @staticmethod
+    def forward(ctx, *inputs, **params):
+        xd=inputs[0].data
+        xp = cp if xd.__class__ is cparray else np
+        if params['inplace']:
+            result = xp.tanh(xd, out=xd)
+        else:
+            result = xp.tanh(xd)
+        ctx.save_for_backward(result)
+        return result
+    @staticmethod
+    def backward(ctx, *grad):
+        xp = cp if grad[0].__class__ is cparray else np
+        yd=ctx.saved_tensors[0]
+        return grad[0] * xp.subtract(1, yd * yd, dtype=yd.dtype)
 def tanh(xt):
-    xd = xt.data
-    xp = cp if xd.__class__ is cparray else np
-    return compute_ufunc(xp.tanh, xt)
-
-@inplace_precheck
+    return Tanh.apply(xt, inplace=False)
 def tanh_(xt):
-    xd = xt.data
-    xp = cp if xd.__class__ is cparray else np
-    return compute_ufunc(xp.tanh, xt, out=xd)
+    return Tanh.apply(xt, inplace=True)
 
-@register_gradients(np.tanh, cp.tanh)
-def backward(yt, grad, params):
-    xp = cp if grad.__class__ is cparray else np
-    xt = yt.parents[0][0]
-    if xt.requires_grad:
-        yd = get_data(yt)
-        xt.grad += grad * xp.subtract(1, yd * yd, dtype=yd.dtype)
-
-
+class Sigmoid(Function):
+    @staticmethod
+    def forward(ctx, *inputs, **params):
+        xd=inputs[0].data
+        xp = cp if xd.__class__ is cparray else np
+        if params['inplace']:
+            result = xp.exp(-xp.logaddexp(0,-xd, out=xd), out=xd)
+        else:
+            result = xp.exp(-xp.logaddexp(0,-xd))
+        ctx.save_for_backward(result)
+        return result
+    @staticmethod
+    def backward(ctx, *grad):
+        xp = cp if grad[0].__class__ is cparray else np
+        yd=ctx.saved_tensors[0]
+        return grad[0] * yd * xp.subtract(1, yd, dtype=yd.dtype)
 def sigmoid(xt):
-    xd = xt.data
-    xp = cp if xd.__class__ is cparray else np
-    value=xp.exp(-xp.logaddexp(0,-xd))
-    output = build_links(value, xt.requires_grad, sigmoid, xt)
-    return output
-
-@inplace_precheck
+    return Sigmoid.apply(xt, inplace=False)
 def sigmoid_(xt):
-    xd = xt.data
-    xp = cp if xd.__class__ is cparray else np
-    value = xp.exp(-xp.logaddexp(0,-xd, out=xd), out=xd)
-    output = build_links(value, xt.requires_grad, sigmoid, xt)
-    return output
-
-
-@register_gradients(sigmoid)
-def backward(yt, grad, params):
-    xp = cp if grad.__class__ is cparray else np
-    xt = yt.parents[0][0]
-    if xt.requires_grad:
-        yd = get_data(yt)
-        xt.grad += grad * yd * xp.subtract(1, yd, dtype=grad.dtype)
+    return Sigmoid.apply(xt, inplace=True)
 
 ######################################
 ## requires nothing during backward ##
 ######################################
+class Sign(Function):
+    @staticmethod
+    def forward(ctx, *inputs, **params):
+        xd = inputs[0].data
+        xp = cp if xd.__class__ is cparray else np
+        result = xp.sign(xd)
+        return result
+    @staticmethod
+    def backward(ctx, *grad):
+        xp = cp if grad[0].__class__ is cparray else np
+        return grad[0] * xp.zeros_like(grad[0])
+
 @register_gradients(np.negative,cp.negative)
 def backward(yt, grad, params):
     xt = yt.parents[0][0]
@@ -144,75 +170,102 @@ def sin(xt):
 def sin_(xt):
     xd = xt.data
     xp = cp if xd.__class__ is cparray else np
-    return compute_ufunc(xp.sin, xt, params={'copy':xd.copy()})
+    return compute_ufunc(xp.sin, xt, out=xd, params={'copy':xd.copy()})
 
 @register_gradients(np.sin, cp.sin)
-def backward(tensor, grad, params):
+def backward(yt, grad, params):
     xp = cp if grad.__class__ is cparray else np
-    inputs = tensor.parents
-    if inputs[0].requires_grad:
-        x = inputs[0].data
-        inputs[0].grad += grad * xp.cos(x)
+    p=yt.parents[0]
+    xt= p[0]
+    if xt.requires_grad:
+        xd = params['copy'] if 'copy' in params else  get_data(p)
+        xt.grad += grad * xp.cos(xd)
 
 
-def cos(x):
-    xp = cp if x.data.__class__ is cparray else np
-    return compute_ufunc(xp.cos, x)
-
+def cos(xt):
+    xd = xt.data
+    xp = cp if xd.__class__ is cparray else np
+    return compute_ufunc(xp.cos, xt)
+@inplace_precheck
+def cos_(xt):
+    xd = xt.data
+    xp = cp if xd.__class__ is cparray else np
+    return compute_ufunc(xp.cos, xt, out=xd, params={'copy':xd.copy()})
 
 @register_gradients(np.cos, cp.cos)
-def backward(tensor, grad, params):
+def backward(yt, grad, params):
     xp = cp if grad.__class__ is cparray else np
-    inputs = tensor.parents
-    if inputs[0].requires_grad:
-        x = inputs[0].data
-        inputs[0].grad += -grad * xp.sin(x)
+    p=yt.parents[0]
+    xt = p[0]
+    if xt.requires_grad:
+        xd = params['copy'] if 'copy' in params else  get_data(p)
+        xt.grad += -grad * xp.sin(xd)
 
-def log(x):
-    xp = cp if x.data.__class__ is cparray else np
-    return compute_ufunc(xp.log, x)
 
+def log(xt):
+    xd = xt.data
+    xp = cp if xd.__class__ is cparray else np
+    return compute_ufunc(xp.log, xt)
+@inplace_precheck
+def log_(xt):
+    xd = xt.data
+    xp = cp if xd.__class__ is cparray else np
+    return compute_ufunc(xp.log, xt, out=xd, params={'copy':xd.copy()})
 
 @register_gradients(np.log, cp.log)
-def backward(tensor, grad, params):
-    xp = cp if grad.__class__ is cparray else np
-    inputs = tensor.parents
-    if inputs[0].requires_grad:
-        inputs[0].grad += grad / inputs[0].data
+def backward(yt, grad, params):
+    p=yt.parents[0]
+    xt = p[0]
+    if xt.requires_grad:
+        xd = params['copy'] if 'copy' in params else  get_data(p)
+        xt.grad += grad / xd
 
 
-def abs(x):
-    pass
+def abs(xt):
+    xd = xt.data
+    xp = cp if xd.__class__ is cparray else np
+    return compute_ufunc(xp.abs, xt)
 
+def abs_(xt):
+    xd = xt.data
+    xp = cp if xd.__class__ is cparray else np
+    return compute_ufunc(xp.abs, xt, out=xd, params={'copy': xd.copy()})
 
 @register_gradients(np.abs, cp.abs)
-def backward(tensor, grad, params):
-    pass
+def backward(yt, grad, params):
+    xp = cp if grad.__class__ is cparray else np
+    p=yt.parents[0]
+    xt = p[0]
+    if xt.requires_grad:
+        xd=params['copy'] if 'copy' in params else get_data(p)
+        xt.grad += grad * xp.sign(xd)
 
 
-
-
+######################################################################################################################
 @register_gradients(np.multiply, cp.multiply)
-def backward(tensor, grad, params):
-    # element-wise multiplication
-    inputs = tensor.parents
-    inpt0 = inputs[0]
-    inpt1 = inputs[1]
-    if inpt0.requires_grad:
-        inpt0.grad += reverse_broadcast(grad * inpt1.data, inpt0.shape)
-    if inpt1.requires_grad:
-        inpt1.grad += reverse_broadcast(grad * inpt0.data, inpt1.shape)
+def backward(yt, grad, params):
+    p0,p1 = yt.parents[0],yt.parents[1]
+    xt0 = p0[0]
+    xt1 = p1[0]
+    if xt0.requires_grad:
+        xd1=get_data(p1)
+        xt0.grad += reverse_broadcast(grad * xd1, xt0.shape)
+    if xt1.requires_grad:
+        xd0=params['copy'] if 'copy' in params else get_data(p0)
+        xt1.grad += reverse_broadcast(grad * xd0, xt1.shape)
 
 
 @register_gradients(np.divide, cp.divide)
-def backward(tensor, grad, params):
-    inputs = tensor.parents
-    num = inputs[0]
-    deno = inputs[1]
-    if num.requires_grad:
-        num.grad += reverse_broadcast(grad / deno.data, num.shape)
-    if deno.requires_grad:
-        deno.grad += reverse_broadcast(-grad * num.data / (deno.data * deno.data), deno.shape)
+def backward(yt, grad, params):
+    p0, p1 = yt.parents[0], yt.parents[1]
+    xt0 = p0[0] # numerator
+    xt1 = p1[0] # denominator
+    xd1 = get_data(p1)
+    if xt0.requires_grad:
+        xt0.grad += reverse_broadcast(grad / xd1, xt0.shape)
+    if xt1.requires_grad:
+        xd0 = params['copy'] if 'copy' in params else get_data(p0)
+        xt1.grad += reverse_broadcast(-grad * xd0 / (xd1 * xd1), xt1.shape)
 
 
 @register_gradients(np.power, cp.power)

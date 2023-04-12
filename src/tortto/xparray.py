@@ -4,16 +4,16 @@ class nparray(np.ndarray):
     def __new__(cls, input_array, *args, **kwargs):
         obj = np.array(input_array, *args, **kwargs).view(cls)
         obj._version = 0
+
         return obj
     def __array_finalize__(self, obj):
         if obj is None: return
-        self._version = getattr(obj, 'info', 0)
+        self._version = getattr(obj, '_version', 0)
 
-####################
-## cupy subclass ##
-####################
+
+# cupy
 from importlib.util import find_spec
-cparray = False
+cparray = None
 cupy_is_loaded = bool(find_spec('cupy'))
 cp = np  # cupy defaults to numpy
 if cupy_is_loaded:
@@ -31,9 +31,11 @@ if cupy_is_loaded:
         def __new__(cls, input_array, *args, **kwargs):
             obj = cp.array(input_array, *args, **kwargs).view(cls)
             obj._version = 0
+
             return obj
         def __array_finalize__(self, obj):
             if obj is None: return
-            self._version = getattr(obj, 'info', 0)
+            self._version = getattr(obj, '_version', 0)
+
 
     cp.set_printoptions(precision=4)

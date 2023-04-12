@@ -277,7 +277,7 @@ def _cuda(x):
     else:
         if not cupy_is_loaded:
             raise RuntimeError("cupy not installed, can't use cuda")
-        value = cp.array(x.data)
+        value = cparray(x.data)
         return build_links(value, x.requires_grad, _cuda, x)
 
 
