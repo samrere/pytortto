@@ -97,7 +97,7 @@ class Function(FunctionBase):
 
         ## forward
         values = cls.forward(grad_fn, *inputs, **params)
-        if params['inplace'] is True: ## For now, inplace is true only when there's a single output
+        if params.get('inplace') is True: ## For now, inplace is true only when there's a single output
             values._version+=1
         if values.__class__ is not tuple:
             values=(values,) # values is a tuple of xparray objects

@@ -69,3 +69,61 @@ def toposort(end_node, child_counts):
                 childless_nodes.append(p)
             else:
                 child_counts[p] -= 1
+
+###################
+## To be deleted ##
+###################
+GRADIENTS_REGISTRY = dict()
+
+def compute_ufunc(ufunc, *inputs, **kwargs):
+    scalars = []
+    requires_grad = False
+    for input in inputs:
+        if isinstance(input, tt.Tensor):
+            scalars.append(input.data)
+            if input.requires_grad:
+                requires_grad = True
+        else:
+            raise NotImplementedError(f'bug at {ufunc.__name__}: input should be Tensor, not {input.__class__.__name__}')
+    value = ufunc(*scalars, **kwargs)
+    output = build_links(value, requires_grad, ufunc, *inputs)
+    return output
+
+def build_links(value, requires_grad, op, *inputs, **params):
+    #################### forward assertion
+    if op is not au.grad_fcn._cuda and op is not au.grad_fcn._cpu:
+        for i in inputs:
+            if i is not None:
+                assert value.dtype == i.dtype, \
+                    f'dtype assertion error during forward at {op.__name__}: ' \
+                    f'value is {value.dtype} whereas input is {i.dtype}'
+                assert hasattr(value.data, 'device') == hasattr(i.data, 'device'), \
+                    f'array class assertion error during forward at {op.__name__}: ' \
+                    f'value is {value.data.__class__} whereas input is {i.data.__class__}'
+    ####################
+
+    if not is_grad_enabled():
+        requires_grad = False
+
+    output = tt.tensor(value, requires_grad=requires_grad, copy=False)
+
+    # early exit if not require grad
+    if not requires_grad:
+        return output
+
+    # Nones are recorded and can be duplicated (i.e. when weight and bias are both False in batch_norm)
+    output.parents.extend(inputs)
+    output.grad_fn = op
+    output.grad_fn_param = params
+    return output
+
+
+def register_gradients(*gradients):
+    def wrapper(fn):
+        for gradient in gradients:
+            if gradient in GRADIENTS_REGISTRY: # precheck
+                raise ValueError(f'{gradient.__name__} already in registry')
+        for gradient in gradients: # gradients from ufunc may be same
+            GRADIENTS_REGISTRY[gradient] = fn
+        return fn
+    return wrapper

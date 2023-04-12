@@ -187,7 +187,7 @@ class Tensor:
         return compute_ufunc(xp.add, self, other)
 
     __radd__ = __add__
-    @inplace_precheck
+    # @inplace_precheck
     def __iadd__(self, other):
         xp = cp if self.data.__class__ is cparray else np
         if other.__class__ in Number:
@@ -203,7 +203,7 @@ class Tensor:
             other = Tensor(xp.array(other), dtype=self.dtype)
         return compute_ufunc(xp.subtract, self, other)
 
-    @inplace_precheck
+    # @inplace_precheck
     def __isub__(self, other):
         xp = cp if self.data.__class__ is cparray else np
         if other.__class__ in Number:
@@ -229,7 +229,7 @@ class Tensor:
         return compute_ufunc(xp.multiply, self, other)
 
     __rmul__ = __mul__
-    @inplace_precheck
+    # @inplace_precheck
     def __imul__(self, other):
         xp = cp if self.data.__class__ is cparray else np
         if other.__class__ in Number:
@@ -247,7 +247,7 @@ class Tensor:
             other = Tensor(xp.array(other), dtype=self.dtype)
         return compute_ufunc(xp.divide, self, other)
 
-    @inplace_precheck
+    # @inplace_precheck
     def __idiv__(self, other):
         xp = cp if self.data.__class__ is cparray else np
         if other.__class__ in Number:
@@ -287,7 +287,7 @@ class Tensor:
         #     key = tuple([(slice(i,i+1,None) if i.__class__ is int else i) for i in key])
         return _slice(self, key)
 
-    @inplace_precheck
+    # @inplace_precheck
     def __setitem__(self, key, value):
         print(key)
         ...

@@ -132,30 +132,80 @@ class Sign(Function):
     @staticmethod
     def backward(ctx, *grad):
         xp = cp if grad[0].__class__ is cparray else np
-        return grad[0] * xp.zeros_like(grad[0])
+        return xp.zeros_like(grad[0])
+def sign(xt):
+    return Sign.apply(xt)
 
-@register_gradients(np.negative,cp.negative)
-def backward(yt, grad, params):
-    xt = yt.parents[0][0]
-    if xt.requires_grad:
-        xt.grad += -grad
-@register_gradients(np.add, cp.add)
-def backward(yt, grad, params):
-    x0t, x1t = yt.parents[0][0],yt.parents[1][0]
-    if x0t.requires_grad:
-        x0t.grad += reverse_broadcast(grad, x0t.shape)
-    if x1t.requires_grad:
-        x1t.grad += reverse_broadcast(grad, x1t.shape)
+class Neg(Function):
+    @staticmethod
+    def forward(ctx, *inputs, **params):
+        xd=inputs[0].data
+        xp = cp if xd.__class__ is cparray else np
+        if params['inplace']:
+            result = xp.negative(xd, out=xd)
+        else:
+            result = xp.negative(xd)
+        return result
+    @staticmethod
+    def backward(ctx, *grad):
+        return -grad[0]
+def neg(xt):
+    return Neg.apply(xt, inplace=False)
+negative = neg
+def neg_(xt):
+    return Neg.apply(xt, inplace=True)
+negative_ = neg_
+
+class Add(Function):
+    @staticmethod
+    def forward(ctx, *inputs, **params):
+        xd0, xd1 = inputs[0].data, inputs[1].data
+        xp = cp if xd0.__class__ is cparray else np
+        if params['inplace']:
+            result = xp.add(xd0, xd1, out=xd0)
+        else:
+            result = xp.add(xd0, xd1)
+        ctx.params={'shape':(xd0.shape, xd1.shape)}
+        return result
+    @staticmethod
+    def backward(ctx, *grad):
+        grad0, grad1= None, None
+        xd0_shape, xd1_shape = ctx.params['shape']
+        if ctx.needs_input_grad[0]:
+            grad0 = reverse_broadcast(grad, xd0_shape)
+        if ctx.needs_input_grad[1]:
+            grad0 = reverse_broadcast(grad, xd1_shape)
+        return grad0, grad1
+
+def add(input, other):
+    return Add.apply(input, other, inplace=False)
 
 
-@register_gradients(np.subtract, cp.subtract)
-def backward(yt, grad, params):
-    x0t, x1t = yt.parents[0][0], yt.parents[1][0]
-    if x0t.requires_grad:
-        x0t.grad += reverse_broadcast(grad, x0t.shape)
-    if x1t.requires_grad:
-        x1t.grad += -reverse_broadcast(grad, x1t.shape)
 
+class Sub(Function):
+    @staticmethod
+    def forward(ctx, *inputs, **params):
+        xd0, xd1 = inputs[0].data, inputs[1].data
+        xp = cp if xd0.__class__ is cparray else np
+        if params['inplace']:
+            result = xp.subtract(xd0, xd1, out=xd0)
+        else:
+            result = xp.subtract(xd0, xd1)
+        ctx.params={'shape':(xd0.shape, xd1.shape)}
+        return result
+    @staticmethod
+    def backward(ctx, *grad):
+        grad0, grad1= None, None
+        xd0_shape, xd1_shape = ctx.params['shape']
+        if ctx.needs_input_grad[0]:
+            grad0 = reverse_broadcast(grad, xd0_shape)
+        if ctx.needs_input_grad[1]:
+            grad0 = -reverse_broadcast(grad, xd1_shape)
+        return grad0, grad1
+
+def sub(input, other):
+    return Sub.apply(input, other, inplace=False)
+subtract = sub
 
 ###########################################
 ## requires input values during backward ##
@@ -166,7 +216,7 @@ def sin(xt):
     xd = xt.data
     xp = cp if xd.__class__ is cparray else np
     return compute_ufunc(xp.sin, xt)
-@inplace_precheck
+# @inplace_precheck
 def sin_(xt):
     xd = xt.data
     xp = cp if xd.__class__ is cparray else np
@@ -186,7 +236,7 @@ def cos(xt):
     xd = xt.data
     xp = cp if xd.__class__ is cparray else np
     return compute_ufunc(xp.cos, xt)
-@inplace_precheck
+# @inplace_precheck
 def cos_(xt):
     xd = xt.data
     xp = cp if xd.__class__ is cparray else np
@@ -206,7 +256,7 @@ def log(xt):
     xd = xt.data
     xp = cp if xd.__class__ is cparray else np
     return compute_ufunc(xp.log, xt)
-@inplace_precheck
+# @inplace_precheck
 def log_(xt):
     xd = xt.data
     xp = cp if xd.__class__ is cparray else np
