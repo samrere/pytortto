@@ -98,7 +98,9 @@ class Function(FunctionBase):
 
         ## forward
         results = cls.forward(grad_fn, *inputs, **params)
+        is_tensor=False
         if results.__class__ is tt.Tensor:
+            is_tensor=True
             results = (results,)
 
         grad_fn.grad = [tt._int_zero] * len(results)
@@ -108,6 +110,6 @@ class Function(FunctionBase):
                 r.requires_grad=False
                 r.grad_fn=None
 
-        if len(results) == 1:
+        if is_tensor:
             results = results[0]
         return results

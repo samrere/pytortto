@@ -11,9 +11,7 @@ class Permute(Function):
         xd0 = xt0.data
         xp = cp if xd0.__class__ is cparray else np
         requires_grad = xt0.requires_grad
-        yt0 = tt.tensor(xp.transpose(xd0, params['dims']), requires_grad=requires_grad, copy=False, _output_idx=0)
-        if requires_grad:
-            yt0.grad_fn = ctx
+        yt0 = tt.tensor(xp.transpose(xd0, params['dims']), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn = ctx)
         ctx.params = params
         return yt0
     @staticmethod
@@ -46,9 +44,7 @@ class Transpose(Function):
         xp = cp if xd0.__class__ is cparray else np
         requires_grad = xt0.requires_grad
         dim0, dim1 = params['dim0'], params['dim1']
-        yt0 = tt.tensor(xp.swapaxes(xd0, dim0,dim1), requires_grad=requires_grad, copy=False, _output_idx=0)
-        if requires_grad:
-            yt0.grad_fn = ctx
+        yt0 = tt.tensor(xp.swapaxes(xd0, dim0,dim1), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn = ctx)
         ctx.params = params
         return yt0
     @staticmethod
@@ -79,10 +75,8 @@ class Mm(Function):
         if x0_true_shape[-1] != x1_true_shape[-2]:
             raise ValueError(f'Dimension mismatch: input0 has a shape of {xd0.shape} and '
                              f'input1 has a shape of {xd1.shape}')
-        yt0 = tt.tensor(xp.matmul(xd0, xd1), requires_grad=requires_grad, copy=False, _output_idx=0)
+        yt0 = tt.tensor(xp.matmul(xd0, xd1), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn = ctx)
         ctx.save_for_backward(xt0, xt1)
-        if requires_grad:
-            yt0.grad_fn = ctx
         return yt0
 
     @staticmethod
@@ -115,9 +109,7 @@ class Sum(Function):
         requires_grad = xt0.requires_grad
         dim=params['dim']
         keepdim=params['keepdim']
-        yt0 = tt.tensor(xp.sum(xd0, axis=dim, keepdims=keepdim), requires_grad=requires_grad, copy=False, _output_idx=0)
-        if requires_grad:
-            yt0.grad_fn = ctx
+        yt0 = tt.tensor(xp.sum(xd0, axis=dim, keepdims=keepdim), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn = ctx)
         ctx.params = {'shape': xd0.shape, 'dim':dim, 'keepdim':keepdim}
         return yt0
     @staticmethod
@@ -143,8 +135,6 @@ def sum(input, dim=None, keepdim=False):
     return Sum.apply(input, dim=dim, keepdim=keepdim)
 
 
-
-
 class Mean(Function):
     @staticmethod
     def forward(ctx, *inputs, **params):
@@ -154,10 +144,8 @@ class Mean(Function):
         requires_grad = xt0.requires_grad
         dim=params['dim']
         keepdim=params['keepdim']
-        yt0 = tt.tensor(xp.mean(xd0, axis=dim, keepdims=keepdim), requires_grad=requires_grad, copy=False, _output_idx=0)
+        yt0 = tt.tensor(xp.mean(xd0, axis=dim, keepdims=keepdim), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn = ctx)
         ctx.save_for_backward(xt0)
-        if requires_grad:
-            yt0.grad_fn = ctx
         ctx.params = params
         return yt0
     @staticmethod
@@ -195,10 +183,8 @@ class Var(Function):
         dim=params['dim']
         unbiased=params['unbiased']
         keepdim=params['keepdim']
-        yt0 = tt.tensor(xp.var(xd0, axis=dim, ddof=unbiased, keepdims=keepdim), requires_grad=requires_grad, copy=False, _output_idx=0)
+        yt0 = tt.tensor(xp.var(xd0, axis=dim, ddof=unbiased, keepdims=keepdim), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn = ctx)
         ctx.save_for_backward(xt0)
-        if requires_grad:
-            yt0.grad_fn = ctx
         ctx.params = params
         return yt0
     @staticmethod
@@ -241,9 +227,7 @@ class Cat(Function):
             indices.append(xt.shape[dim])
         indices = np.cumsum(indices)
         params['indices']=indices
-        yt0 = tt.tensor(xp.concatenate(xdn, dim), requires_grad=requires_grad, copy=False,_output_idx=0)
-        if requires_grad:
-            yt0.grad_fn = ctx
+        yt0 = tt.tensor(xp.concatenate(xdn, dim), requires_grad=requires_grad, copy=False,_output_idx=0, grad_fn = ctx)
         ctx.params = params
         return yt0
     @staticmethod
@@ -264,9 +248,7 @@ class Slice(Function):
         xt0, = inputs
         xd0 = xt0.data
         requires_grad = xt0.requires_grad
-        yt0 = tt.tensor(xd0[params['key']], requires_grad=requires_grad, copy=False, _output_idx=0)
-        if requires_grad:
-            yt0.grad_fn = ctx
+        yt0 = tt.tensor(xd0[params['key']], requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn = ctx)
         params['shape']=xd0.shape
         ctx.params = params
         return yt0
@@ -281,22 +263,83 @@ class Slice(Function):
         grad0[key]=gd0
         return grad0
 
-def _slice(input, key):
-    return Slice.apply(input, key=key)
 
-#########################################################
+class View(Function):
+    @staticmethod
+    def forward(ctx, *inputs, **params):
+        xt0, = inputs
+        xd0 = xt0.data
+        requires_grad = xt0.requires_grad
+        yt0 = tt.tensor(xd0.reshape(params['shape']), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn = ctx)
+        params['shape'] = xd0.shape
+        ctx.params = params
+        return yt0
+    @staticmethod
+    def backward(ctx, *grad_outputs):
+        gd0, = grad_outputs
+        grad0=gd0.reshape(ctx.params['shape'])
+        return grad0
+
+class Split(Function):
+    @staticmethod
+    def forward(ctx, *inputs, **params):
+        xt0, = inputs
+        xd0 = xt0.data
+        requires_grad = xt0.requires_grad
+        dim=params['dim']
+        split_size_or_sections=params['split_size_or_sections']
+        dim_size=xd0.shape[dim]
+        if dim<0:
+            dim+=xd0.ndim
+        if split_size_or_sections.__class__ is int:
+            split_size=split_size_or_sections
+            ytn = tuple(
+                tt.tensor(
+                    xd0[
+                        tuple(
+                            slice(None) if i != dim else slice(j, j + split_size) for i in range(xd0.ndim)
+                        )
+                    ],
+                    requires_grad=requires_grad,
+                    copy=False,
+                    _output_idx=j//split_size,
+                    grad_fn=ctx
+                )
+                for j in range(0, dim_size, split_size)
+            )
+        else:
+            sections=split_size_or_sections
+            if buildin_sum(sections) != dim_size:
+                raise RuntimeError(f"split_with_sizes expects split_sizes to sum exactly to 8 "
+                                   f"(input tensor's size at dimension {dim}), but got split_sizes={sections}")
+            sum_sections = np.cumsum(split_size_or_sections)
+            ytn = tuple(
+                tt.tensor(
+                    xd0[
+                        tuple(
+                            slice(None) if i != dim else slice(sum_sections[j] - sec, sum_sections[j]) for i in range(xd0.ndim)
+                        )
+                    ],
+                    requires_grad=requires_grad,
+                    copy=False,
+                    _output_idx=j,
+                    grad_fn=ctx
+                )
+                for j, sec in enumerate(sections)
+            )
+        params['shape'] = xd0.shape
+        ctx.params = params
+        if ytn.__class__ is not tuple:
+            ytn = (ytn,)
+        return ytn
+    @staticmethod
+    def backward(ctx, *grad_outputs):
+        ...
+def split(tensor, split_size_or_sections, dim=0):
+    return Split.apply(tensor, split_size_or_sections=split_size_or_sections, dim=dim)
 
 
 
-def _view(x, newshape):
-    return build_links(x.data.reshape(newshape), x.requires_grad, _view, x, newshape=newshape)
-
-
-@register_gradients(_view)
-def backward(tensor, grad, params):
-    inputs = tensor.parents
-    if inputs[0].requires_grad:
-        inputs[0].grad += grad.reshape(inputs[0].shape)
 
 
 def chunk(x, chunks, dim=0):
@@ -307,26 +350,6 @@ def chunk(x, chunks, dim=0):
     chunk_size = dim_size // chunks + (dim_size % chunks != 0)
     return tuple(x[tuple(slice(None) if i != dim else slice(j, j + chunk_size) for i in range(x_data.ndim))] for j in
                  range(0, dim_size, chunk_size))
-
-
-def split(x, split_size_or_sections, dim=0):
-    x_data = x.data
-    dim_size = x_data.shape[dim]
-    if dim < 0:
-        dim += x_data.ndim
-    if split_size_or_sections.__class__ is int:
-        return tuple(
-            x[tuple(slice(None) if i != dim else slice(j, j + split_size_or_sections) for i in range(x_data.ndim))] for
-            j in range(0, dim_size, split_size_or_sections))
-    else:
-        if buildin_sum(split_size_or_sections) != dim_size:
-            raise RuntimeError(
-                f'sum of split sections {split_size_or_sections} does not equal to dimension size {dim_size}.')
-        sum_sections = np.cumsum(split_size_or_sections)
-        return tuple(x[tuple(
-            slice(None) if i != dim else slice(sum_sections[j] - sec, sum_sections[j]) for i in range(x_data.ndim))] for
-                     j, sec in enumerate(split_size_or_sections))
-
 
 def _cuda(x):
     if x.data.__class__ is cparray:
@@ -393,7 +416,6 @@ def backward(tensor, grad, params):
 
 
 def _expand(x, *dims):
-    print('hello')
     x_data = x.data
     x_shape = x_data.shape
     leading_dim = len(dims) - len(x_shape)

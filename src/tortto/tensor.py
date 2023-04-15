@@ -2,7 +2,7 @@ import tortto
 from tortto import np, cp, cparray, nparray,_int_zero
 from .VariableFunctions import *
 from .autograd.grad_fcn import *
-from .autograd.grad_fcn import _slice, _view, _repeat, _expand, _cuda, _cpu
+from .autograd.grad_fcn import _repeat, _expand, _cuda, _cpu
 from .autograd.grad_ufunc import *
 
 int16 = np.int16
@@ -26,7 +26,7 @@ class Tensor:
             data = nparray(data, dtype=dtype, copy=copy)
         self.data = data
         self.grad = None
-        self.grad_fn = None
+        self.grad_fn = kwargs.get('grad_fn')
         self.requires_grad = requires_grad
 
         self._output_idx = kwargs.get('_output_idx')
@@ -284,7 +284,7 @@ class Tensor:
         raise RuntimeError(f"In-place matmul is not supported. Use 'a = a @ b' instead of 'a @= b'.")
 
     def __getitem__(self, key):
-        return _slice(self, key)
+        return Slice.apply(self, key=key)
 
     # @inplace_precheck
     def __setitem__(self, key, value):
@@ -389,10 +389,10 @@ class Tensor:
 
 
 
-    def view(self, *newshape):
-        if newshape[0].__class__ is not int:
-            newshape = newshape[0]
-        return _view(self, newshape)
+    def view(self, *shape):
+        if shape[0].__class__ is not int:
+            shape = shape[0]
+        return View.apply(self, shape=shape)
 
     def flatten(self, start_dim=0, end_dim=-1):
         return flatten(self, start_dim, end_dim)

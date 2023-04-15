@@ -80,6 +80,8 @@ def tensor(data, requires_grad=False, dtype=None, copy=True, **kwargs):
     else:
         if dtype is None:
             dtype = getattr(data, 'dtype', tt.float32)
+        if 'grad_fn' in kwargs and not requires_grad:
+            kwargs['grad_fn'] = None
         return tt.Tensor(data, requires_grad=requires_grad, dtype=dtype, copy=copy, **kwargs)
 
 
