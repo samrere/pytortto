@@ -1,0 +1,195 @@
+Sqrt:
+  num_inputs: 1
+  num_outputs: 1
+  allow_inplace: True
+  forward_inplace: xp.sqrt(..., out=...)
+  forward_outplace: xp.sqrt(...)
+  save_for_backward: yt0
+  params:
+  backward: ["gd... / xp.multiply(yd..., 2, dtype=yd....dtype)"]
+  alias: True
+  long:
+  alias_: True
+  long_:
+
+Exp:
+  num_inputs: 1
+  num_outputs: 1
+  allow_inplace: True
+  forward_inplace: xp.exp(..., out=...)
+  forward_outplace: xp.exp(...)
+  save_for_backward: yt0
+  params:
+  backward: ["gd... * yd..."]
+  alias: True
+  long:
+  alias_: True
+  long_:
+
+Tan:
+  num_inputs: 1
+  num_outputs: 1
+  allow_inplace: True
+  forward_inplace: xp.tan(..., out=...)
+  forward_outplace: xp.tan(...)
+  save_for_backward: yt0
+  params:
+  backward: ["gd... * xp.add(1, yd... * yd..., dtype=yd....dtype)"]
+  alias: True
+  long:
+  alias_: True
+  long_:
+
+Tanh:
+  num_inputs: 1
+  num_outputs: 1
+  allow_inplace: True
+  forward_inplace: xp.tanh(..., out=...)
+  forward_outplace: xp.tanh(...)
+  save_for_backward: yt0
+  params:
+  backward: ["gd... * xp.subtract(1, yd... * yd..., dtype=yd....dtype)"]
+  alias: True
+  long:
+  alias_: True
+  long_:
+
+Sigmoid:
+  num_inputs: 1
+  num_outputs: 1
+  allow_inplace: True
+  forward_inplace: xp.exp(-xp.logaddexp(0, -..., out=...), out=...)
+  forward_outplace: xp.exp(-xp.logaddexp(0, -...))
+  save_for_backward: yt0
+  params:
+  backward: ["gd... * yd... * xp.subtract(1, yd..., dtype=yd....dtype)"]
+  alias: True
+  long:
+  alias_: True
+  long_:
+
+Sign:
+  num_inputs: 1
+  num_outputs: 1
+  allow_inplace: False
+  forward_inplace:
+  forward_outplace: xp.sign(...)
+  save_for_backward:
+  params:
+  backward: ["xp.zeros_like(gd...)"]
+  alias: True
+  long:
+  alias_:
+  long_:
+
+Neg:
+  num_inputs: 1
+  num_outputs: 1
+  allow_inplace: True
+  forward_inplace: xp.neg(..., out=...)
+  forward_outplace: xp.neg(...)
+  save_for_backward:
+  params:
+  backward: ["-gd..."]
+  alias: True
+  long: negative
+  alias_: True
+  long_: negative_
+
+Add:
+  num_inputs: 2
+  num_outputs: 1
+  allow_inplace: True
+  forward_inplace: xp.add(..., ///, out=...)
+  forward_outplace: xp.add(..., ///)
+  save_for_backward:
+  params: shape
+  backward: ["reverse_broadcast(gd0, xd..._shape)"]
+  alias: True
+  long:
+  alias_:
+  long_:
+
+Sub:
+  num_inputs: 2
+  num_outputs: 1
+  allow_inplace: True
+  forward_inplace: xp.sub(..., ///, out=...)
+  forward_outplace: xp.sub(..., ///)
+  save_for_backward:
+  params: shape
+  backward: ["reverse_broadcast(gd0, xd..._shape)", "-reverse_broadcast(gd0, xd..._shape)"]
+  alias: True
+  long: subtract
+  alias_:
+  long_:
+
+Sin:
+  num_inputs: 1
+  num_outputs: 1
+  allow_inplace: True
+  forward_inplace: xp.sin(..., out=...)
+  forward_outplace: xp.sin(...)
+  save_for_backward: xt0
+  params:
+  backward: ["gd... * xp.cos(xd...)"]
+  alias: True
+  long:
+  alias_: True
+  long_:
+
+Cos:
+  num_inputs: 1
+  num_outputs: 1
+  allow_inplace: True
+  forward_inplace: xp.cos(..., out=...)
+  forward_outplace: xp.cos(...)
+  save_for_backward: xt0
+  params:
+  backward: ["-gd... * xp.sin(xd...)"]
+  alias: True
+  long:
+  alias_: True
+  long_:
+
+Log:
+  num_inputs: 1
+  num_outputs: 1
+  allow_inplace: True
+  forward_inplace: xp.log(..., out=...)
+  forward_outplace: xp.log(...)
+  save_for_backward: xt0
+  params:
+  backward: ["gd... / xd..."]
+  alias: True
+  long:
+  alias_: True
+  long_:
+
+Abs:
+  num_inputs: 1
+  num_outputs: 1
+  allow_inplace: True
+  forward_inplace: xp.abs(..., out=...)
+  forward_outplace: xp.abs(...)
+  save_for_backward: xt0
+  params:
+  backward: ["gd... * xp.sign(xd...)"]
+  alias: True
+  long: absolute
+  alias_: True
+  long_:
+
+Pow:
+  num_inputs: 2
+  num_outputs: 1
+  allow_inplace: True
+  forward_inplace: xp.power(..., ///, out=...)
+  forward_outplace: xp.power(..., ///)
+  save_for_backward: xt0, xt1, yt0
+  params: shape
+  backward: ["reverse_broadcast(gd0 * xd/// * yd... / xd..., xd..._shape)", "reverse_broadcast(gd0 * xp.log(xd...) * yd..., xd///_shape)"]
+  alias: True
+  long:
+  alias_:
+  long_:

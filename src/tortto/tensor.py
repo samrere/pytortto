@@ -25,15 +25,10 @@ class Tensor:
         else:
             data = nparray(data, dtype=dtype, copy=copy)
         self.data = data
-        # self.parents = []
-
-        # self.children = set()
-        self.grad = _int_zero
+        self.grad = None
         self.grad_fn = None
-        # self.grad_fn_param = None
         self.requires_grad = requires_grad
 
-        self._output_version = kwargs.get('_output_version')
         self._output_idx = kwargs.get('_output_idx')
 
     ################
@@ -100,9 +95,9 @@ class Tensor:
         self.data.strides = value
 
 
-    ###################################
-    ## operator overload (no grad fn)##
-    ###################################
+    ####################################
+    ## operator overload (no grad fn) ##
+    ####################################
     def __len__(self):
         return self.shape[0]
 
@@ -173,26 +168,25 @@ class Tensor:
             raise TypeError(f"'>=' not supported between instances of '{self.__class__}' and '{other.__class__}'")
         return tt.tensor(self.data >= other, dtype=float32, copy=False)
 
-    ###################################
-    ## operator overload (has grad fn)##
-    ###################################
+    #####################################
+    ## operator overload (has grad fn) ##
+    #####################################
     def __neg__(self):
-        xp = cp if self.data.__class__ is cparray else np
-        return compute_ufunc(xp.negative, self)
+        return neg(self)
 
     def __add__(self, other):
         xp = cp if self.data.__class__ is cparray else np
         if other.__class__ in Number:
             other = Tensor(xp.array(other), dtype=self.dtype)
-        return compute_ufunc(xp.add, self, other)
+        return add(self, other)
 
     __radd__ = __add__
-    # @inplace_precheck
+
     def __iadd__(self, other):
         xp = cp if self.data.__class__ is cparray else np
         if other.__class__ in Number:
             other = Tensor(xp.array(other), dtype=self.dtype)
-        return compute_ufunc(xp.add, self, other, out=self.data)
+        return Add.apply(self, other, inplace=True)
 
     add_ = __iadd__
     add=__add__
@@ -201,14 +195,14 @@ class Tensor:
         xp = cp if self.data.__class__ is cparray else np
         if other.__class__ in Number:
             other = Tensor(xp.array(other), dtype=self.dtype)
-        return compute_ufunc(xp.subtract, self, other)
+        return sub(self, other)
 
     # @inplace_precheck
     def __isub__(self, other):
         xp = cp if self.data.__class__ is cparray else np
         if other.__class__ in Number:
             other = Tensor(xp.array(other), dtype=self.dtype)
-        return compute_ufunc(xp.subtract, self, other, out=self.data)
+        return Sub.apply(self, other, inplace=True)
 
     subtract_=__isub__
     sub_=__isub__
@@ -219,22 +213,22 @@ class Tensor:
         xp = cp if self.data.__class__ is cparray else np
         if other.__class__ in Number:
             other = Tensor(xp.array(other), dtype=self.dtype)
-        return compute_ufunc(xp.subtract, other, self)
+        return sub(other, self)
 
 
     def __mul__(self, other):
         xp = cp if self.data.__class__ is cparray else np
         if other.__class__ in Number:
             other = Tensor(xp.array(other), dtype=self.dtype)
-        return compute_ufunc(xp.multiply, self, other)
+        return mul(self, other)
 
     __rmul__ = __mul__
-    # @inplace_precheck
+
     def __imul__(self, other):
         xp = cp if self.data.__class__ is cparray else np
         if other.__class__ in Number:
             other = Tensor(xp.array(other), dtype=self.dtype)
-        return compute_ufunc(xp.multiply, self, other, params={'copy':self.data.copy()}, out=self.data)
+        return Mul.apply(self, other, inplace=True)
 
     multiply_ = __imul__
     mul_=__imul__
@@ -245,14 +239,13 @@ class Tensor:
         xp = cp if self.data.__class__ is cparray else np
         if other.__class__ in Number:
             other = Tensor(xp.array(other), dtype=self.dtype)
-        return compute_ufunc(xp.divide, self, other)
+        return div(self, other)
 
-    # @inplace_precheck
     def __idiv__(self, other):
         xp = cp if self.data.__class__ is cparray else np
         if other.__class__ in Number:
             other = Tensor(xp.array(other), dtype=self.dtype)
-        return compute_ufunc(xp.divide, self, other, params={'copy': self.data.copy()}, out=self.data)
+        return Div.apply(self, other, inplace=True)
 
     divide_ = __idiv__
     div_=__idiv__
@@ -262,29 +255,35 @@ class Tensor:
         xp = cp if self.data.__class__ is cparray else np
         if other.__class__ in Number:
             other = Tensor(xp.array(other), dtype=self.dtype)
-        return compute_ufunc(xp.divide, other, self)
+        return div(other, self)
 
     def __pow__(self, other):  # i.e. Tensor**3
         xp = cp if self.data.__class__ is cparray else np
         if other.__class__ in Number:
             other = Tensor(xp.array(other), dtype=self.dtype)
-        return compute_ufunc(xp.power, self, other)
+        return pow(self, other)
 
     def __rpow__(self, other):  # i.e. 3**Tensor
         xp = cp if self.data.__class__ is cparray else np
         if other.__class__ in Number:
             other = Tensor(xp.array(other), dtype=self.dtype)
-        return compute_ufunc(xp.power, other, self)
+        return pow(other, self)
+
+    def __ipow__(self, other):
+        xp = cp if self.data.__class__ is cparray else np
+        if other.__class__ in Number:
+            other = Tensor(xp.array(other), dtype=self.dtype)
+        return Pow.apply(self, other, inplace=True)
+
+    pow = __pow__
+    pow_ = __ipow__
 
     def __matmul__(self, other):
         return matmul(self, other)
+    def __imatmul__(self, other):
+        raise RuntimeError(f"In-place matmul is not supported. Use 'a = a @ b' instead of 'a @= b'.")
 
     def __getitem__(self, key):
-        # change indexing to slicing to keep dimension
-        # if key.__class__ is int:
-        #     key = slice(key, key + 1, None)
-        # else:
-        #     key = tuple([(slice(i,i+1,None) if i.__class__ is int else i) for i in key])
         return _slice(self, key)
 
     # @inplace_precheck
@@ -379,14 +378,14 @@ class Tensor:
 
 
 
-    def sum(self, dim=None, keepdims=False):
-        return sum(self, dim, keepdims)
+    def sum(self, dim=None, keepdim=False):
+        return sum(self, dim, keepdim)
 
-    def mean(self, dim=None, keepdims=False):
-        return mean(self, dim, keepdims)
+    def mean(self, dim=None, keepdim=False):
+        return mean(self, dim, keepdim)
 
-    def var(self, dim=None, unbiased=True, keepdims=False):
-        return var(self, dim, unbiased, keepdims)
+    def var(self, dim=None, unbiased=True, keepdim=False):
+        return var(self, dim, unbiased, keepdim)
 
 
 
@@ -398,13 +397,13 @@ class Tensor:
     def flatten(self, start_dim=0, end_dim=-1):
         return flatten(self, start_dim, end_dim)
 
-    def transpose(self, axes, axis2=None):
-        if axis2 is not None:
-            raise RuntimeError('tortto transpose is different from torch transpose, use swapaxes instead.')
-        return transpose(self, axes)
+    def permute(self, dims):
+        return permute(self, dims)
+    def transpose(self, dim0, dim1):
+        return transpose(self, dim0, dim1)
 
-    def swapaxes(self, axis1, axis2):
-        return swapaxes(self, axis1, axis2)
+    swapaxes=transpose
+    swapdims=transpose
 
     def moveaxis(self, source, destination):
         return moveaxis(self, source, destination)
@@ -477,56 +476,26 @@ class Tensor:
         return self
 
     def backward(self, gradient=None):
+        if not self.requires_grad and not self.grad_fn:
+            raise RuntimeError('element 0 of tensors does not require grad and does not have a grad_fn')
         if gradient is None:
             xp = cp if self.data.__class__ is cparray else np
             gradient = xp.expand_dims(xp.array(1, dtype=self.dtype), axis=tuple(range(self.ndim)))
         elif isinstance(gradient, Tensor):
             gradient = gradient.data
         if self.data.shape != gradient.shape:
-            raise RuntimeError(
-                f'Mismatch in shape: tensor has a shape of {self.shape} and gradient has a shape of {gradient.shape}')
-        self.grad = gradient
-        child_counts, parent_counts = count_children_and_parents(self)
-        for node in toposort(self, child_counts):
-            if node.requires_grad and node.grad_fn:
-                #################### backward assertion
-                if node.grad_fn is not _cuda and node.grad_fn is not _cpu:
-                    assert node.grad.dtype == node.data.dtype, \
-                        f'dtype assertion error during backward at {node.grad_fn.__name__}: ' \
-                        f'grad is {node.grad.dtype} whereas node data is {node.data.dtype}'
-                    assert node.grad.shape == node.data.shape, \
-                        f'shape assertion error during backward at {node.grad_fn.__name__}: ' \
-                        f'grad is {node.grad.shape} whereas node data is {node.data.shape}'
-                    # assert array class: either both numpy arrays or both cupy arrays:
-                    # only cupy array has attr "device", so they either both have .device, or both not have it.
-                    # avoid using node.grad.__class__ because it can be array scalar( np.array(3)+np.array(4) = 7 ),
-                    # so its class can be not ndarray
-                    # numpy scalar: https://numpy.org/doc/stable/reference/arrays.scalars.html
-                    assert hasattr(node.grad, 'device') == hasattr(node.data, 'device'), \
-                        f'array class assertion error during backward at {node.grad_fn.__name__}: ' \
-                        f'grad is {node.grad.__class__} whereas node data is {node.data.__class__}'
-                ####################
-                if node.parents:  # calc. gradient if node has parents
-                    GRADIENTS_REGISTRY[node.grad_fn](node, node.grad, node.grad_fn_param)
-            for child in node.children:
-                # child.grad = _int_zero
-                parent_counts[child] -= 1
-                assert parent_counts[child] >= 0, 'negative child counts'
-                if parent_counts[child] == 0:
-                    child.grad = _int_zero
-                    """
-                    keep this commented in the end after you implemented all inplace stuff
-                    and test on real examples to see if this is required.
-                    why? to allow multiple backward call on same graph:
-                        import torch
-                        x=torch.tensor([1,2,3.], requires_grad=True)
-                        y=x*2; z=x*3
-                        y.sum().backward(); print(x.grad)
-                        z.sum().backward(); print(x.grad)
-                    """
-                    # child.parents = []
-                    # child.output_version = None
-            node.children = set()
+            raise RuntimeError(f"grad can be implicitly created only for scalar outputs")
+        self.grad_fn.grad[0] = gradient
+        for grad_fn in toposort(self.grad_fn):
+            gradient = grad_fn.apply(*grad_fn.grad)
+            for i in range(len(grad_fn.next_functions)):
+                if gradient[i] is not None:
+                    fn, ind = grad_fn.next_functions[i]
+                    fn.grad[ind]+=gradient[i]
+            grad_fn.clear()
+
+
+
 
 
 

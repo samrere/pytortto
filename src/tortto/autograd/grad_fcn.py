@@ -1,234 +1,291 @@
 from tortto import np, cp, cparray, cupy_is_loaded, _int_zero
+from .function import *
 from .helper import *
 
 buildin_sum = sum
 
-
-def transpose(x, axes=None):
-    xp = cp if x.data.__class__ is cparray else np
-    output = build_links(xp.transpose(x.data, axes), x.requires_grad, transpose, x, axes=axes)
-    return output
-
-
-@register_gradients(transpose)
-def backward(tensor, grad, params):
-    xp = cp if grad.__class__ is cparray else np
-    inputs = tensor.parents
-    if inputs[0].requires_grad:
-        if params is None:
-            inputs[0].grad += xp.transpose(grad)
-        else:
-            inputs[0].grad += xp.transpose(grad, axes=np.argsort(params['axes']))
-
-
-def swapaxes(x, axis1, axis2):
-    ndim = x.ndim
-    if not -ndim<=axis1<=(ndim-1):
-        raise IndexError(f'Dimension out of range (expected to be in range of [{-ndim}, {ndim-1}], but got {axis1})')
-    if not -ndim<=axis2<=(ndim-1):
-        raise IndexError(f'Dimension out of range (expected to be in range of [{-ndim}, {ndim-1}], but got {axis2})')
-    axes = np.arange(ndim)
-    axes[axis1], axes[axis2] = axes[axis2], axes[axis1]
-    return transpose(x, axes)
-
-def moveaxis(x, source, destination):
-    ndim = x.ndim
-    if not -ndim<=source<=(ndim-1):
-        raise IndexError(f'Dimension out of range (expected to be in range of [{-ndim}, {ndim-1}], but got {source})')
-    if not -ndim<=destination<=(ndim-1):
-        raise IndexError(f'Dimension out of range (expected to be in range of [{-ndim}, {ndim-1}], but got {destination})')
+class Permute(Function):
+    @staticmethod
+    def forward(ctx, *inputs, **params):
+        xt0, = inputs
+        xd0 = xt0.data
+        xp = cp if xd0.__class__ is cparray else np
+        requires_grad = xt0.requires_grad
+        yt0 = tt.tensor(xp.transpose(xd0, params['dims']), requires_grad=requires_grad, copy=False, _output_idx=0)
+        if requires_grad:
+            yt0.grad_fn = ctx
+        ctx.params = params
+        return yt0
+    @staticmethod
+    def backward(ctx, *grad_outputs):
+        gd0, = grad_outputs
+        dims=ctx.params['axes']
+        xp = cp if gd0.__class__ is cparray else np
+        grad0=xp.transpose(gd0, axes=np.argsort(dims))
+        return grad0
+def permute(input, dims):
+    return Permute.apply(input, dims=dims)
+def moveaxis(input, source, destination):
+    ndim = input.ndim
+    if not -ndim <= source <= (ndim - 1):
+        raise IndexError(f'Dimension out of range (expected to be in range of [{-ndim}, {ndim - 1}], but got {source})')
+    if not -ndim <= destination <= (ndim - 1):
+        raise IndexError(
+            f'Dimension out of range (expected to be in range of [{-ndim}, {ndim - 1}], but got {destination})')
     if destination < 0:
         destination += ndim
-    axes = list(range(ndim))
-    axes.insert(destination, axes.pop(source))
-    return transpose(x, axes)
+    dims = list(range(ndim))
+    dims.insert(destination, dims.pop(source))
+    return Permute.apply(input, dims=dims)
 
-def matmul(x0, x1):
-    x0_data = x0.data
-    x1_data = x1.data
-    if x0_data.ndim==0 or x1_data.ndim==0:
-        raise RuntimeError(f'both arguments to matmul need to be at least 1D, but they are {x0_data.ndim}D and {x1_data.ndim}D')
-    x0_low_dim = x0_data.ndim < 2
-    x1_low_dim = x1_data.ndim < 2
-    x0_true_shape = (1,) + x0_data.shape if x0_low_dim else x0_data.shape
-    x1_true_shape = x1_data.shape + (1,) if x1_low_dim else x1_data.shape
-    if x0_true_shape[-1] != x1_true_shape[-2]:
-        raise ValueError(
-            f'Dimension mismatch: input0 has a shape of {x0.data.shape} and input1 has a shape of {x1.data.shape}')
-    value = x0_data @ x1_data
-    output = build_links(value, x0.requires_grad | x1.requires_grad, matmul, x0, x1, x0_low_dim=x0_low_dim,
-                         x1_low_dim=x1_low_dim)
-    return output
+class Transpose(Function):
+    @staticmethod
+    def forward(ctx, *inputs, **params):
+        xt0, = inputs
+        xd0 = xt0.data
+        xp = cp if xd0.__class__ is cparray else np
+        requires_grad = xt0.requires_grad
+        dim0, dim1 = params['dim0'], params['dim1']
+        yt0 = tt.tensor(xp.swapaxes(xd0, dim0,dim1), requires_grad=requires_grad, copy=False, _output_idx=0)
+        if requires_grad:
+            yt0.grad_fn = ctx
+        ctx.params = params
+        return yt0
+    @staticmethod
+    def backward(ctx, *grad_outputs):
+        gd0, = grad_outputs
+        dim0, dim1=ctx.params['dim0'],ctx.params['dim1']
+        xp = cp if gd0.__class__ is cparray else np
+        grad0=xp.swapaxes(gd0, dim0,dim1)
+        return grad0
+def transpose(input, dim0, dim1):
+    return Transpose.apply(input, dim0=dim0, dim1=dim1)
+swapaxes=transpose
+swapdims=transpose
 
 
-@register_gradients(matmul)
-def backward(tensor, grad, params):
-    inputs = tensor.parents
-    x0 = inputs[0]
-    x1 = inputs[1] if len(inputs) > 1 else inputs[0]
-    x0_low_dim = params['x0_low_dim']
-    x1_low_dim = params['x1_low_dim']
-    if x1_low_dim:
-        grad = grad[..., None]
-        x1_data = x1.data[:, None]
-    else:
-        x1_data = x1.data
-    if x0_low_dim:
-        grad = grad[..., None, :]
-        x0_data = x0.data[None]
-    else:
-        x0_data = x0.data
+class Mm(Function):
+    @staticmethod
+    def forward(ctx, *inputs, **params):
+        xt0, xt1 = inputs
+        xd0, xd1 = xt0.data, xt1.data
+        if xd0.ndim == 0 or xd1.ndim == 0:
+            raise RuntimeError(
+                f'both arguments to matmul need to be at least 1D, but they are {xd0.ndim}D and {xd1.ndim}D')
+        xp = cp if xd0.__class__ is cparray else np
+        requires_grad = xt0.requires_grad | xt1.requires_grad
+        x0_true_shape = (1,) + xd0.shape if xd0.ndim < 2 else xd0.shape
+        x1_true_shape = xd1.shape + (1,) if xd1.ndim < 2 else xd1.shape
+        if x0_true_shape[-1] != x1_true_shape[-2]:
+            raise ValueError(f'Dimension mismatch: input0 has a shape of {xd0.shape} and '
+                             f'input1 has a shape of {xd1.shape}')
+        yt0 = tt.tensor(xp.matmul(xd0, xd1), requires_grad=requires_grad, copy=False, _output_idx=0)
+        ctx.save_for_backward(xt0, xt1)
+        if requires_grad:
+            yt0.grad_fn = ctx
+        return yt0
 
-    if x0.requires_grad:
-        result = grad @ x1_data.swapaxes(-1, -2)
-        x0.grad += reverse_broadcast(result, x0.shape)
-    if x1.requires_grad:
-        result = x0_data.swapaxes(-1, -2) @ grad
-        if x1_low_dim:
-            axis0 = tuple(range(result.ndim - x1_data.ndim))
-            x1.grad += result.sum(axis=axis0)[..., 0]
+    @staticmethod
+    def backward(ctx, *grad_outputs):
+        gd0, = grad_outputs
+        xd0, xd1 = ctx.saved_tensors
+        if ctx.needs_input_grad[0]:
+            if xd1.ndim<2:
+                xd1=xd1[:,None]
+            grad0= reverse_broadcast(gd0 @ xd1.swapaxes(-1, -2), xd0.shape)
         else:
-            x1.grad += reverse_broadcast(result, x1.shape)
-
-
-def sum(x, dim=None, keepdims=False):
-    # if axis is None and keepdims is False:
-    #     raise RuntimeError('taking sum of all axes, but keepdims is False.')
-    x_data=x.data
-    xp = cp if x_data.__class__ is cparray else np
-    if dim is None:
-        dim=tuple(range(x_data.ndim))
-    if isinstance(dim, int):
-        dim = (dim,)
-    value = xp.sum(x_data, axis=dim, keepdims=keepdims)
-    output = build_links(value, x.requires_grad, sum, x, dim=dim, keepdims=keepdims)
-    return output
-
-
-@register_gradients(sum)
-def backward(tensor, grad, params):
-    xp = cp if grad.__class__ is cparray else np
-    inputs = tensor.parents
-    if inputs[0].requires_grad:
-        x = inputs[0].data
-        if params is None:  # if axis is None, repeat grad in all dimensions of x.shape
-            inputs[0].grad += xp.lib.stride_tricks.as_strided(grad, shape=x.shape, strides=[0 for _ in x.shape])
+            grad0 = None
+        if ctx.needs_input_grad[1]:
+            if xd0.ndim<2:
+                xd0=xd0[None]
+            grad1= reverse_broadcast(xd0.swapaxes(-1, -2) @ gd0, xd1.shape)
         else:
-            dim = params['dim']
-            keepdims = params['keepdims']
-            if not keepdims:
-                grad = xp.expand_dims(grad, dim)
-            strides = list(grad.strides)
+            grad1 = None
+        return grad0, grad1
+def matmul(input, other):
+    return Mm.apply(input, other)
+
+
+class Sum(Function):
+    @staticmethod
+    def forward(ctx, *inputs, **params):
+        xt0, = inputs
+        xd0 = xt0.data
+        xp = cp if xd0.__class__ is cparray else np
+        requires_grad = xt0.requires_grad
+        dim=params['dim']
+        keepdim=params['keepdim']
+        yt0 = tt.tensor(xp.sum(xd0, axis=dim, keepdims=keepdim), requires_grad=requires_grad, copy=False, _output_idx=0)
+        if requires_grad:
+            yt0.grad_fn = ctx
+        ctx.params = {'shape': xd0.shape, 'dim':dim, 'keepdim':keepdim}
+        return yt0
+    @staticmethod
+    def backward(ctx, *grad_outputs):
+        gd0, = grad_outputs
+        xd0_shape = ctx.params['shape']
+        dim = ctx.params['dim']
+        keepdim = ctx.params['keepdim']
+        xp = cp if gd0.__class__ is cparray else np
+        if dim is None:
+            grad0=xp.lib.stride_tricks.as_strided(gd0, shape=xd0_shape, strides=[0 for _ in xd0_shape])
+        else:
+            if dim.__class__ is not tuple:
+                dim = (dim,)
+            if not keepdim:
+                gd0 = xp.expand_dims(gd0, dim)
+            strides = list(gd0.strides)
             for i in dim:
                 strides[i] = 0  # repeat along axis in x.shape
-            inputs[0].grad += xp.lib.stride_tricks.as_strided(grad, shape=x.shape, strides=strides)
+            grad0=xp.lib.stride_tricks.as_strided(gd0, shape=xd0_shape, strides=strides)
+        return grad0
+def sum(input, dim=None, keepdim=False):
+    return Sum.apply(input, dim=dim, keepdim=keepdim)
 
 
-def mean(x, dim=None, keepdims=False):
-    # if axis is None and keepdims is False:
-    #     raise RuntimeError('taking mean of all axes, but keepdims is False.')
-    x_data = x.data
-    xp = cp if x_data.__class__ is cparray else np
-    if dim is None:
-        dim=tuple(range(x_data.ndim))
-    if isinstance(dim, int):
-        dim = (dim,)
-    value = xp.mean(x_data, axis=dim, keepdims=keepdims)
-    output = build_links(value, x.requires_grad, mean, x, dim=dim, keepdims=keepdims)
-    return output
 
 
-@register_gradients(mean)
-def backward(tensor, grad, params):
-    xp = cp if grad.__class__ is cparray else np
-    inputs = tensor.parents
-    if inputs[0].requires_grad:
-        x = inputs[0].data
-        if params['dim'] is None:  # if axis is None, repeat grad in all dimensions of x.shape
-            inputs[0].grad += xp.lib.stride_tricks.as_strided(xp.divide(grad, x.size, dtype=grad.dtype), shape=x.shape, strides=[0 for _ in x.shape])
+class Mean(Function):
+    @staticmethod
+    def forward(ctx, *inputs, **params):
+        xt0, = inputs
+        xd0 = xt0.data
+        xp = cp if xd0.__class__ is cparray else np
+        requires_grad = xt0.requires_grad
+        dim=params['dim']
+        keepdim=params['keepdim']
+        yt0 = tt.tensor(xp.mean(xd0, axis=dim, keepdims=keepdim), requires_grad=requires_grad, copy=False, _output_idx=0)
+        ctx.save_for_backward(xt0)
+        if requires_grad:
+            yt0.grad_fn = ctx
+        ctx.params = params
+        return yt0
+    @staticmethod
+    def backward(ctx, *grad_outputs):
+        gd0, = grad_outputs
+        xd0, = ctx.saved_tensors
+        dim = ctx.params['dim']
+        keepdim = ctx.params['keepdim']
+        xp = cp if gd0.__class__ is cparray else np
+        if dim is None:
+            grad0=xp.lib.stride_tricks.as_strided(xp.divide(gd0, xd0.size, dtype=gd0.dtype), shape=xd0.shape, strides=[0 for _ in xd0.shape])
         else:
-            dim = params['dim']
-            keepdims = params['keepdims']
-            if not keepdims:
-                grad = xp.expand_dims(grad, dim)
+            if dim.__class__ is not tuple:
+                dim = (dim,)
+            if not keepdim:
+                gd0 = xp.expand_dims(gd0, dim)
             N = 1
-            strides = list(grad.strides)
+            strides = list(gd0.strides)
             for i in dim:
-                N *= x.shape[i]
+                N *= xd0.shape[i]
                 strides[i] = 0  # repeat along axis in x.shape
-            inputs[0].grad += xp.lib.stride_tricks.as_strided(xp.divide(grad, N, dtype=grad.dtype), shape=x.shape, strides=strides)
+            grad0=xp.lib.stride_tricks.as_strided(xp.divide(gd0, N, dtype=gd0.dtype), shape=xd0.shape, strides=strides)
+        return grad0
+def mean(input, dim=None, keepdim=False):
+    return Mean.apply(input, dim=dim, keepdim=keepdim)
 
 
-def var(x, dim=None, unbiased=True, keepdims=False):
-    # if axis is None and keepdims is False:
-    #     raise RuntimeError('taking var of all axes, but keepdims is False.')
-    x_data = x.data
-    xp = cp if x_data.__class__ is cparray else np
-    if dim is None:
-        dim=tuple(range(x_data.ndim))
-    if isinstance(dim, int):
-        dim = (dim,)
-    ddof = unbiased == True
-    value = xp.var(x_data, axis=dim, ddof=ddof, keepdims=keepdims)
-    output = build_links(value, x.requires_grad, var, x, ddof=ddof, dim=dim, keepdims=keepdims)
-    return output
-
-
-@register_gradients(var)
-def backward(tensor, grad, params):
-    xp = cp if grad.__class__ is cparray else np
-    inputs = tensor.parents
-    if inputs[0].requires_grad:
-        dim = params['dim']
-        ddof = params['ddof']
-        keepdims = params['keepdims']
-        if not keepdims:
-            grad = xp.expand_dims(grad, dim)
-        x = inputs[0].data
-        me = xp.mean(x, axis=dim, keepdims=True)
-        if params is None:  # if axis is None
-            N = x.size  # all element
+class Var(Function):
+    @staticmethod
+    def forward(ctx, *inputs, **params):
+        xt0, = inputs
+        xd0 = xt0.data
+        xp = cp if xd0.__class__ is cparray else np
+        requires_grad = xt0.requires_grad
+        dim=params['dim']
+        unbiased=params['unbiased']
+        keepdim=params['keepdim']
+        yt0 = tt.tensor(xp.var(xd0, axis=dim, ddof=unbiased, keepdims=keepdim), requires_grad=requires_grad, copy=False, _output_idx=0)
+        ctx.save_for_backward(xt0)
+        if requires_grad:
+            yt0.grad_fn = ctx
+        ctx.params = params
+        return yt0
+    @staticmethod
+    def backward(ctx, *grad_outputs):
+        gd0, = grad_outputs
+        xd0, = ctx.saved_tensors
+        dim = ctx.params['dim']
+        unbiased = ctx.params['unbiased']
+        keepdim = ctx.params['keepdim']
+        xp = cp if gd0.__class__ is cparray else np
+        if not keepdim:
+            gd0 = xp.expand_dims(gd0, dim)
+        me = xp.mean(xd0, axis=dim, keepdims=True)
+        if dim is None:  # if axis is None
+            N = xd0.size  # all element
         else:
+            if dim.__class__ is not tuple:
+                dim = (dim,)
             N = 1
             for i in dim:
-                N *= x.shape[i]
-        inputs[0].grad += 2 * grad * xp.divide(x - me, N - ddof, dtype=grad.dtype)
+                N *= xd0.shape[i]
+        grad0 = 2 * gd0 * xp.divide(xd0 - me, N - unbiased, dtype=gd0.dtype)
+        return grad0
+def var(input, dim=None, unbiased=True,keepdim=False):
+    return Var.apply(input, dim=dim, unbiased=unbiased, keepdim=keepdim)
 
+
+class Cat(Function):
+    @staticmethod
+    def forward(ctx, *inputs, **params):
+        dim = ctx.params['dim']
+        xp = cp if inputs[0].__class__ is cparray else np
+        xdn=[]
+        requires_grad=False
+        indices=[]
+        for xt in inputs:
+            xdn.append(xt.data)
+            if requires_grad is False and xt.requires_grad:
+                requires_grad=True
+            indices.append(xt.shape[dim])
+        indices = np.cumsum(indices)
+        params['indices']=indices
+        yt0 = tt.tensor(xp.concatenate(xdn, dim), requires_grad=requires_grad, copy=False,_output_idx=0)
+        if requires_grad:
+            yt0.grad_fn = ctx
+        ctx.params = params
+        return yt0
+    @staticmethod
+    def backward(ctx, *grad_outputs):
+        gd0, = grad_outputs
+        xp = cp if gd0.__class__ is cparray else np
+        dim=ctx.params['dim']
+        indices = ctx.params['indices']
+        gradn=xp.split(gd0, indices_or_sections=indices[:-1], axis=dim)
+        return gradn
 
 def cat(tensors, dim=0):
-    xp = cp if tensors[0].data.__class__ is cparray else np
-    requires_grad = any(t.requires_grad for t in tensors)
-    tensors_data = tuple(t.data for t in tensors)
-    indices = np.cumsum([t.shape[dim] for t in tensors_data])
-    value = xp.concatenate(tensors_data, dim)
-    output = build_links(value, requires_grad, cat, *tensors, axis=dim, indices=indices)
-    return output
+    return Cat.apply(*tensors, dim=dim)
 
+class Slice(Function):
+    @staticmethod
+    def forward(ctx, *inputs, **params):
+        xt0, = inputs
+        xd0 = xt0.data
+        requires_grad = xt0.requires_grad
+        yt0 = tt.tensor(xd0[params['key']], requires_grad=requires_grad, copy=False, _output_idx=0)
+        if requires_grad:
+            yt0.grad_fn = ctx
+        params['shape']=xd0.shape
+        ctx.params = params
+        return yt0
 
-@register_gradients(cat)
-def backward(tensor, grad, params):
-    xp = cp if grad.__class__ is cparray else np
-    inputs = tensor.parents
-    axis = params['axis']
-    indices = params['indices']
-    grad = xp.split(grad, indices_or_sections=indices, axis=axis)
-    for idx, inpt in enumerate(inputs):
-        if inpt.requires_grad:
-            inpt.grad += grad[idx]
+    @staticmethod
+    def backward(ctx, *grad_outputs):
+        gd0, = grad_outputs
+        xd0_shape = ctx.params['shape']
+        key = ctx.params['key']
+        xp = cp if gd0.__class__ is cparray else np
+        grad0=xp.zeros(xd0_shape, dtype=gd0.dtype)
+        grad0[key]=gd0
+        return grad0
 
+def _slice(input, key):
+    return Slice.apply(input, key=key)
 
-def _slice(x, key):
-    return build_links(x.data[key], x.requires_grad, _slice, x, key=key)
+#########################################################
 
-
-@register_gradients(_slice)
-def backward(tensor, grad, params):
-    xp = cp if grad.__class__ is cparray else np
-    inputs = tensor.parents
-    if inputs[0].requires_grad:
-        if inputs[0].grad is _int_zero:
-            inputs[0].grad = xp.zeros_like(inputs[0].data)
-        inputs[0].grad[params['key']] += grad
 
 
 def _view(x, newshape):

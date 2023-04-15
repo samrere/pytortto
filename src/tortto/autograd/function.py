@@ -1,45 +1,49 @@
 import tortto as tt
 from .grad_mode import *
 from .helper import get_data
-import tortto.autograd as au
+
 
 class FunctionBase(object):
-    __slots__ = ['variable','to_save', 'next_functions', 'needs_input_grad','grad','params']
+    __slots__ = ['variable','to_save', 'next_functions','prev_function_counts','needs_input_grad','grad','params',
+                 ]
     def __init__(self):
         self.variable = None
-        self.to_save = []
+        self.to_save = None
         self.next_functions = None
-        self.needs_input_grad = []
-        self.grad=None
-        self.params=None
+        self.prev_function_counts = 0
+        self.needs_input_grad = None
+        self.grad = None
+        self.params = None
 
     def save_for_backward(self, *tensors):
-        for t in tensors:
-            self.to_save.append((t, t._version))
+        self.to_save = tuple((t, t._version) if t.__class__ is tt.Tensor else None for t in tensors)
 
     @property
     def saved_tensors(self): # output tensor.data
         return tuple(get_data(pair) for pair in self.to_save)
 
     def clear(self): # clear grad etc. after backward
-        ...
+        self.to_save = None
+        self.grad = None
+        self.params = None
+
 
 
 class BackwardFunction(FunctionBase): # metaclass for all grad_fn
     def apply(self, *args):
-        out=self._forward_cls.backward(self, *args)
-        if out.__class__ is not tuple:
+        out=self._forward_cls.backward(self, *args) # output is xparray or tuple/list of xparray
+        if out.__class__ is not tuple and out.__class__ is not list: # grad from Cat is a list
             out=(out,)
         if len(out)!=len(self.needs_input_grad):
             raise RuntimeError(f'function {self.__class__.__name__} returned an incorrect number of gradients'
                                f' (expected {len(self.needs_input_grad)}, got {len(out)})')
-        if len(out)==1:
-            out=out[0]
         return out
 
 class AccumulateGrad(BackwardFunction):
     def apply(self, *args):
-        self.variable.grad+=self.grad
+        if self.variable.grad is None:
+            self.variable.grad = tt._int_zero
+        self.variable.grad+=self.grad[0]
 
 
 class Function(FunctionBase):
@@ -54,7 +58,7 @@ class Function(FunctionBase):
                                   " autograd.Function.")
 
     @staticmethod
-    def backward(ctx, *grad):
+    def backward(ctx, *grad_outputs):
         raise NotImplementedError("You must implement the backward method for "
                                   "your custom autograd.Function to use it with backward "
                                   "mode automatic differentiation.")
@@ -68,62 +72,42 @@ class Function(FunctionBase):
         grad_fn.params=params
 
         ## check if output requires grad, as well as inplace precheck
-        requires_grad = False
         next_functions = []
+        needs_input_grad = []
         for i in inputs:
-            if i.__class__ is not tt.Tensor: # can be commented out
-                raise RuntimeError(f'BUG: input is not tensor at {grad_fn_class}')
-            grad_fn.needs_input_grad.append(i.requires_grad)
+            needs_input_grad.append(i.requires_grad)
             if i.requires_grad:
-                requires_grad = True
                 if i.grad_fn is None:
                     if params.get('inplace') is True:
                         raise RuntimeError('a leaf Variable that requires grad is being used in an in-place operation.')
                     else:
                         # create an AccumulateGrad object and link
-                        acc_grad=AccumulateGrad()
-                        acc_grad.variable=i
-                        next_functions.append((acc_grad,0))
+                        acc_grad = AccumulateGrad()
+                        acc_grad.variable = i
+                        acc_grad.prev_function_counts+=1
+                        acc_grad.grad = [tt._int_zero]
+                        acc_grad.next_functions=tuple()
+                        next_functions.append((acc_grad, 0))
                 else:
+                    i.grad_fn.prev_function_counts+=1
                     next_functions.append((i.grad_fn, i._output_idx))
             else:
                 next_functions.append((None,0))
+        grad_fn.needs_input_grad = tuple(needs_input_grad)
         grad_fn.next_functions=tuple(next_functions)
 
-
-        ## if using tortto.no_grad(), disable requires_grad
-        if not is_grad_enabled():
-            requires_grad = False
-
         ## forward
-        values = cls.forward(grad_fn, *inputs, **params)
-        if params.get('inplace') is True: ## For now, inplace is true only when there's a single output
-            values._version+=1
-        if values.__class__ is not tuple:
-            values=(values,) # values is a tuple of xparray objects
-        grad_fn.grad=(tt._int_zero,)*len(values)
+        results = cls.forward(grad_fn, *inputs, **params)
+        if results.__class__ is tt.Tensor:
+            results = (results,)
 
-        ## forward check, comment it out. do test on individual functions
-        # if cls is not au.grad_fcn._cuda and cls is not au.grad_fcn._cpu:
-        #     for v in values:
-        #         for i in inputs:
-        #             if i is not None:
-        #                 assert v.dtype == i.dtype, \
-        #                     f'dtype assertion error during forward at {cls.__name__}: ' \
-        #                     f'value is {v.dtype} whereas input is {i.dtype}'
-        #                 assert hasattr(v.data, 'device') == hasattr(i.data, 'device'), \
-        #                     f'array class assertion error during forward at {cls.__name__}: ' \
-        #                     f'value is {v.data.__class__} whereas input is {i.data.__class__}'
+        grad_fn.grad = [tt._int_zero] * len(results)
 
-        ## create output
-        outputs=[]
-        for idx, v in enumerate(values):
-            out = tt.tensor(v, requires_grad=requires_grad, copy=False, _output_idx=idx, _output_version=v._version)
-            if requires_grad:
-                out.grad_fn=grad_fn
-            outputs.append(out)
+        if not is_grad_enabled(): # if using tortto.no_grad(), disable requires_grad
+            for r in results:
+                r.requires_grad=False
+                r.grad_fn=None
 
-        ## output
-        if len(outputs)==1:
-            outputs=outputs[0]
-        return outputs
+        if len(results) == 1:
+            results = results[0]
+        return results

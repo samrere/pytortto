@@ -1,343 +1,615 @@
 from tortto import np, cp, cparray
-from .helper import *
 from .function import *
+from .helper import *
+
+
 """
-t means tensor object: xt, yt are tensors.
-d means tensor data: xd, yd are .data attribute of xt and yt.
+'x' is input
+'y' is output
+'g' is gradient
+
+'t' is for tensor
+'d' is for data (xparray)
+
+Use special formatting if the function allows inplace, but not all tensors in saved_tensors are used during backward.
+Example: in Div, saved tensor xd0 (numerator) is not used during backward for numerator.
+Therefore, if the denominator doesn't require grad, xd0 can be changed inplace and backward still works.
+Same goes for Mul.
+
+import torch
+x=torch.tensor([1,2,3.], requires_grad=True)+0
+y=torch.tensor([4,5,6.], requires_grad=False)*1
+z=x/y
+x+=1
+z.backward(torch.tensor([1,1,1]))
 """
 
-""" checklist
-1**. use @inplace_precheck before inplace ops
-2**. for inputs that can be numpy scalar, use np.add, np.multiply etc. (np.array(1, dtype=np.float32) + 2 will be float64)
-3*. use y if possible in backward, to avoid recalculation
-4*. be careful of overflow in np.exp 
-"""
-#####################################
-## requires output during backward ##
-#####################################
+
 class Sqrt(Function):
     @staticmethod
     def forward(ctx, *inputs, **params):
-        xd = inputs[0].data
-        xp = cp if xd.__class__ is cparray else np
+        xt0, = inputs
+        xd0 = xt0.data
+        xp = cp if xd0.__class__ is cparray else np
+        requires_grad = xt0.requires_grad
         if params['inplace']:
-            result = xp.sqrt(xd, out=xd)
+            yd0 = xp.sqrt(xd0, out=xd0)
+            yd0._version += 1
+            yt0 = xt0
         else:
-            result = xp.sqrt(xd)
-        ctx.save_for_backward(result)
-        return result
+            yt0 = tt.tensor(xp.sqrt(xd0), requires_grad=requires_grad, copy=False, _output_idx=0)
+        if requires_grad:
+            yt0.grad_fn = ctx
+        ctx.save_for_backward(yt0)
+        return yt0
+
     @staticmethod
-    def backward(ctx, *grad):
-        yd=ctx.saved_tensors[0]
-        xp = cp if grad[0].__class__ is cparray else np
-        return grad[0]*xp.multiply(yd, 0.5, dtype=yd.dtype)
-def sqrt(xt):
-    return Sqrt.apply(xt, inplace=False)
-def sqrt_(xt):
-    return Sqrt.apply(xt, inplace=True)
+    def backward(ctx, *grad_outputs):
+        gd0, = grad_outputs
+        yd0, = ctx.saved_tensors
+        xp = cp if gd0.__class__ is cparray else np
+        grad0 = gd0 / xp.multiply(yd0, 2, dtype=yd0.dtype)
+        return grad0
+
+
+def sqrt(input):
+    return Sqrt.apply(input, inplace=False)
+
+
+def sqrt_(input):
+    return Sqrt.apply(input, inplace=True)
+
 
 class Exp(Function):
     @staticmethod
     def forward(ctx, *inputs, **params):
-        xd=inputs[0].data
-        xp = cp if xd.__class__ is cparray else np
+        xt0, = inputs
+        xd0 = xt0.data
+        xp = cp if xd0.__class__ is cparray else np
+        requires_grad = xt0.requires_grad
         if params['inplace']:
-            result = xp.exp(xd, out=xd)
+            yd0 = xp.exp(xd0, out=xd0)
+            yd0._version += 1
+            yt0 = xt0
         else:
-            result = xp.exp(xd)
-        ctx.save_for_backward(result)
-        return result
+            yt0 = tt.tensor(xp.exp(xd0), requires_grad=requires_grad, copy=False, _output_idx=0)
+        if requires_grad:
+            yt0.grad_fn = ctx
+        ctx.save_for_backward(yt0)
+        return yt0
+
     @staticmethod
-    def backward(ctx, *grad):
-        yd=ctx.saved_tensors[0]
-        return grad[0] * yd
-def exp(xt):
-    return Exp.apply(xt, inplace=False)
-def exp_(xt):
-    return Exp.apply(xt, inplace=True)
+    def backward(ctx, *grad_outputs):
+        gd0, = grad_outputs
+        yd0, = ctx.saved_tensors
+        grad0 = gd0 * yd0
+        return grad0
+
+
+def exp(input):
+    return Exp.apply(input, inplace=False)
+
+
+def exp_(input):
+    return Exp.apply(input, inplace=True)
+
 
 class Tan(Function):
     @staticmethod
     def forward(ctx, *inputs, **params):
-        xd=inputs[0].data
-        xp = cp if xd.__class__ is cparray else np
+        xt0, = inputs
+        xd0 = xt0.data
+        xp = cp if xd0.__class__ is cparray else np
+        requires_grad = xt0.requires_grad
         if params['inplace']:
-            result = xp.tan(xd, out=xd)
+            yd0 = xp.tan(xd0, out=xd0)
+            yd0._version += 1
+            yt0 = xt0
         else:
-            result = xp.tan(xd)
-        ctx.save_for_backward(result)
-        return result
+            yt0 = tt.tensor(xp.tan(xd0), requires_grad=requires_grad, copy=False, _output_idx=0)
+        if requires_grad:
+            yt0.grad_fn = ctx
+        ctx.save_for_backward(yt0)
+        return yt0
+
     @staticmethod
-    def backward(ctx, *grad):
-        xp = cp if grad[0].__class__ is cparray else np
-        yd=ctx.saved_tensors[0]
-        return grad[0] * xp.add(1, yd * yd, dtype=yd.dtype)
-def tan(xt):
-    return Tan.apply(xt, inplace=False)
-def tan_(xt):
-    return Tan.apply(xt, inplace=True)
+    def backward(ctx, *grad_outputs):
+        gd0, = grad_outputs
+        yd0, = ctx.saved_tensors
+        xp = cp if gd0.__class__ is cparray else np
+        grad0 = gd0 * xp.add(1, yd0 * yd0, dtype=yd0.dtype)
+        return grad0
+
+
+def tan(input):
+    return Tan.apply(input, inplace=False)
+
+
+def tan_(input):
+    return Tan.apply(input, inplace=True)
+
 
 class Tanh(Function):
     @staticmethod
     def forward(ctx, *inputs, **params):
-        xd=inputs[0].data
-        xp = cp if xd.__class__ is cparray else np
+        xt0, = inputs
+        xd0 = xt0.data
+        xp = cp if xd0.__class__ is cparray else np
+        requires_grad = xt0.requires_grad
         if params['inplace']:
-            result = xp.tanh(xd, out=xd)
+            yd0 = xp.tanh(xd0, out=xd0)
+            yd0._version += 1
+            yt0 = xt0
         else:
-            result = xp.tanh(xd)
-        ctx.save_for_backward(result)
-        return result
+            yt0 = tt.tensor(xp.tanh(xd0), requires_grad=requires_grad, copy=False, _output_idx=0)
+        if requires_grad:
+            yt0.grad_fn = ctx
+        ctx.save_for_backward(yt0)
+        return yt0
+
     @staticmethod
-    def backward(ctx, *grad):
-        xp = cp if grad[0].__class__ is cparray else np
-        yd=ctx.saved_tensors[0]
-        return grad[0] * xp.subtract(1, yd * yd, dtype=yd.dtype)
-def tanh(xt):
-    return Tanh.apply(xt, inplace=False)
-def tanh_(xt):
-    return Tanh.apply(xt, inplace=True)
+    def backward(ctx, *grad_outputs):
+        gd0, = grad_outputs
+        yd0, = ctx.saved_tensors
+        xp = cp if gd0.__class__ is cparray else np
+        grad0 = gd0 * xp.subtract(1, yd0 * yd0, dtype=yd0.dtype)
+        return grad0
+
+
+def tanh(input):
+    return Tanh.apply(input, inplace=False)
+
+
+def tanh_(input):
+    return Tanh.apply(input, inplace=True)
+
 
 class Sigmoid(Function):
     @staticmethod
     def forward(ctx, *inputs, **params):
-        xd=inputs[0].data
-        xp = cp if xd.__class__ is cparray else np
+        xt0, = inputs
+        xd0 = xt0.data
+        xp = cp if xd0.__class__ is cparray else np
+        requires_grad = xt0.requires_grad
         if params['inplace']:
-            result = xp.exp(-xp.logaddexp(0,-xd, out=xd), out=xd)
+            yd0 = xp.exp(-xp.logaddexp(0, -xd0, out=xd0), out=xd0)
+            yd0._version += 1
+            yt0 = xt0
         else:
-            result = xp.exp(-xp.logaddexp(0,-xd))
-        ctx.save_for_backward(result)
-        return result
-    @staticmethod
-    def backward(ctx, *grad):
-        xp = cp if grad[0].__class__ is cparray else np
-        yd=ctx.saved_tensors[0]
-        return grad[0] * yd * xp.subtract(1, yd, dtype=yd.dtype)
-def sigmoid(xt):
-    return Sigmoid.apply(xt, inplace=False)
-def sigmoid_(xt):
-    return Sigmoid.apply(xt, inplace=True)
+            yt0 = tt.tensor(xp.exp(-xp.logaddexp(0, -xd0)), requires_grad=requires_grad, copy=False, _output_idx=0)
+        if requires_grad:
+            yt0.grad_fn = ctx
+        ctx.save_for_backward(yt0)
+        return yt0
 
-######################################
-## requires nothing during backward ##
-######################################
+    @staticmethod
+    def backward(ctx, *grad_outputs):
+        gd0, = grad_outputs
+        yd0, = ctx.saved_tensors
+        xp = cp if gd0.__class__ is cparray else np
+        grad0 = gd0 * yd0 * xp.subtract(1, yd0, dtype=yd0.dtype)
+        return grad0
+
+
+def sigmoid(input):
+    return Sigmoid.apply(input, inplace=False)
+
+
+def sigmoid_(input):
+    return Sigmoid.apply(input, inplace=True)
+
+
 class Sign(Function):
     @staticmethod
     def forward(ctx, *inputs, **params):
-        xd = inputs[0].data
-        xp = cp if xd.__class__ is cparray else np
-        result = xp.sign(xd)
-        return result
+        xt0, = inputs
+        xd0 = xt0.data
+        xp = cp if xd0.__class__ is cparray else np
+        requires_grad = xt0.requires_grad
+        yt0 = tt.tensor(xp.sign(xd0), requires_grad=requires_grad, copy=False, _output_idx=0)
+        if requires_grad:
+            yt0.grad_fn = ctx
+        return yt0
+
     @staticmethod
-    def backward(ctx, *grad):
-        xp = cp if grad[0].__class__ is cparray else np
-        return xp.zeros_like(grad[0])
-def sign(xt):
-    return Sign.apply(xt)
+    def backward(ctx, *grad_outputs):
+        gd0, = grad_outputs
+        xp = cp if gd0.__class__ is cparray else np
+        grad0 = xp.zeros_like(gd0)
+        return grad0
+
+
+def sign(input):
+    return Sign.apply(input)
+
 
 class Neg(Function):
     @staticmethod
     def forward(ctx, *inputs, **params):
-        xd=inputs[0].data
-        xp = cp if xd.__class__ is cparray else np
+        xt0, = inputs
+        xd0 = xt0.data
+        xp = cp if xd0.__class__ is cparray else np
+        requires_grad = xt0.requires_grad
         if params['inplace']:
-            result = xp.negative(xd, out=xd)
+            yd0 = xp.neg(xd0, out=xd0)
+            yd0._version += 1
+            yt0 = xt0
         else:
-            result = xp.negative(xd)
-        return result
+            yt0 = tt.tensor(xp.neg(xd0), requires_grad=requires_grad, copy=False, _output_idx=0)
+        if requires_grad:
+            yt0.grad_fn = ctx
+        return yt0
+
     @staticmethod
-    def backward(ctx, *grad):
-        return -grad[0]
-def neg(xt):
-    return Neg.apply(xt, inplace=False)
+    def backward(ctx, *grad_outputs):
+        gd0, = grad_outputs
+        grad0 = -gd0
+        return grad0
+
+
+def neg(input):
+    return Neg.apply(input, inplace=False)
+
+
 negative = neg
-def neg_(xt):
-    return Neg.apply(xt, inplace=True)
-negative_ = neg_
+
+
+def neg_(input):
+    return Neg.apply(input, inplace=True)
+
+
+negative_ = neg
+
 
 class Add(Function):
     @staticmethod
     def forward(ctx, *inputs, **params):
-        xd0, xd1 = inputs[0].data, inputs[1].data
+        xt0, xt1 = inputs
+        xd0, xd1 = xt0.data, xt1.data
         xp = cp if xd0.__class__ is cparray else np
+        requires_grad = xt0.requires_grad | xt1.requires_grad
         if params['inplace']:
-            result = xp.add(xd0, xd1, out=xd0)
+            yd0 = xp.add(xd0, xd1, out=xd0)
+            yd0._version += 1
+            yt0 = xt0
         else:
-            result = xp.add(xd0, xd1)
-        ctx.params={'shape':(xd0.shape, xd1.shape)}
-        return result
+            yt0 = tt.tensor(xp.add(xd0, xd1), requires_grad=requires_grad, copy=False, _output_idx=0)
+        if requires_grad:
+            yt0.grad_fn = ctx
+        ctx.params = {'shape':(xd0.shape, xd1.shape)}
+        return yt0
+
     @staticmethod
-    def backward(ctx, *grad):
-        grad0, grad1= None, None
+    def backward(ctx, *grad_outputs):
+        gd0, = grad_outputs
         xd0_shape, xd1_shape = ctx.params['shape']
-        if ctx.needs_input_grad[0]:
-            grad0 = reverse_broadcast(grad, xd0_shape)
-        if ctx.needs_input_grad[1]:
-            grad0 = reverse_broadcast(grad, xd1_shape)
+        grad0 = reverse_broadcast(gd0, xd0_shape) if ctx.needs_input_grad[0] else None
+        grad1 = reverse_broadcast(gd0, xd1_shape) if ctx.needs_input_grad[1] else None
         return grad0, grad1
+
 
 def add(input, other):
     return Add.apply(input, other, inplace=False)
 
 
-
 class Sub(Function):
     @staticmethod
     def forward(ctx, *inputs, **params):
-        xd0, xd1 = inputs[0].data, inputs[1].data
+        xt0, xt1 = inputs
+        xd0, xd1 = xt0.data, xt1.data
         xp = cp if xd0.__class__ is cparray else np
+        requires_grad = xt0.requires_grad | xt1.requires_grad
         if params['inplace']:
-            result = xp.subtract(xd0, xd1, out=xd0)
+            yd0 = xp.sub(xd0, xd1, out=xd0)
+            yd0._version += 1
+            yt0 = xt0
         else:
-            result = xp.subtract(xd0, xd1)
-        ctx.params={'shape':(xd0.shape, xd1.shape)}
-        return result
+            yt0 = tt.tensor(xp.sub(xd0, xd1), requires_grad=requires_grad, copy=False, _output_idx=0)
+        if requires_grad:
+            yt0.grad_fn = ctx
+        ctx.params = {'shape':(xd0.shape, xd1.shape)}
+        return yt0
+
     @staticmethod
-    def backward(ctx, *grad):
-        grad0, grad1= None, None
+    def backward(ctx, *grad_outputs):
+        gd0, = grad_outputs
         xd0_shape, xd1_shape = ctx.params['shape']
-        if ctx.needs_input_grad[0]:
-            grad0 = reverse_broadcast(grad, xd0_shape)
-        if ctx.needs_input_grad[1]:
-            grad0 = -reverse_broadcast(grad, xd1_shape)
+        grad0 = reverse_broadcast(gd0, xd0_shape) if ctx.needs_input_grad[0] else None
+        grad1 = -reverse_broadcast(gd0, xd1_shape) if ctx.needs_input_grad[1] else None
         return grad0, grad1
+
 
 def sub(input, other):
     return Sub.apply(input, other, inplace=False)
+
+
 subtract = sub
 
-###########################################
-## requires input values during backward ##
-###########################################
+
 class Sin(Function):
     @staticmethod
     def forward(ctx, *inputs, **params):
-        xd=inputs[0].data
-        xp = cp if xd.__class__ is cparray else np
+        xt0, = inputs
+        xd0 = xt0.data
+        xp = cp if xd0.__class__ is cparray else np
+        requires_grad = xt0.requires_grad
         if params['inplace']:
-            result = xp.sin(xd, out=xd)
-            ctx.params = {'copy': xd.copy()}
+            ctx.params = {'copy': xd0.copy()}
+            yd0 = xp.sin(xd0, out=xd0)
+            yd0._version += 1
+            yt0 = xt0
+            ctx.save_for_backward(None)
         else:
-            result = xp.sin(xd)
-            ctx.save_for_backward(xd)
-        return result
+            yt0 = tt.tensor(xp.sin(xd0), requires_grad=requires_grad, copy=False, _output_idx=0)
+            ctx.save_for_backward(xt0)
+        if requires_grad:
+            yt0.grad_fn = ctx
+        return yt0
+
     @staticmethod
-    def backward(ctx, *grad):
-        xp = cp if grad[0].__class__ is cparray else np
-        xd = ctx.params['copy'] if 'copy' in ctx.params else ctx.saved_tensors[0]
-        return grad[0] * xp.cos(xd)
-def sin(xt):
-    return Sin.apply(xt, inplace=False)
-def sin_(xt):
-    return Sin.apply(xt, inplace=True)
+    def backward(ctx, *grad_outputs):
+        gd0, = grad_outputs
+        xd0, = ctx.saved_tensors
+        if xd0 is None:
+            xd0 = ctx.params['copy']
+        xp = cp if gd0.__class__ is cparray else np
+        grad0 = gd0 * xp.cos(xd0)
+        return grad0
+
+
+def sin(input):
+    return Sin.apply(input, inplace=False)
+
+
+def sin_(input):
+    return Sin.apply(input, inplace=True)
 
 
 class Cos(Function):
     @staticmethod
     def forward(ctx, *inputs, **params):
-        xd=inputs[0].data
-        xp = cp if xd.__class__ is cparray else np
+        xt0, = inputs
+        xd0 = xt0.data
+        xp = cp if xd0.__class__ is cparray else np
+        requires_grad = xt0.requires_grad
         if params['inplace']:
-            result = xp.cos(xd, out=xd)
-            ctx.params = {'copy': xd.copy()}
+            ctx.params = {'copy': xd0.copy()}
+            yd0 = xp.cos(xd0, out=xd0)
+            yd0._version += 1
+            yt0 = xt0
+            ctx.save_for_backward(None)
         else:
-            result = xp.cos(xd)
-            ctx.save_for_backward(xd)
-        return result
+            yt0 = tt.tensor(xp.cos(xd0), requires_grad=requires_grad, copy=False, _output_idx=0)
+            ctx.save_for_backward(xt0)
+        if requires_grad:
+            yt0.grad_fn = ctx
+        return yt0
+
     @staticmethod
-    def backward(ctx, *grad):
-        xp = cp if grad[0].__class__ is cparray else np
-        xd = ctx.params['copy'] if 'copy' in ctx.params else ctx.saved_tensors[0]
-        return -grad[0] * xp.sin(xd)
-def cos(xt):
-    return Cos.apply(xt, inplace=False)
-def cos_(xt):
-    return Cos.apply(xt, inplace=True)
+    def backward(ctx, *grad_outputs):
+        gd0, = grad_outputs
+        xd0, = ctx.saved_tensors
+        if xd0 is None:
+            xd0 = ctx.params['copy']
+        xp = cp if gd0.__class__ is cparray else np
+        grad0 = -gd0 * xp.sin(xd0)
+        return grad0
+
+
+def cos(input):
+    return Cos.apply(input, inplace=False)
+
+
+def cos_(input):
+    return Cos.apply(input, inplace=True)
 
 
 class Log(Function):
     @staticmethod
     def forward(ctx, *inputs, **params):
-        xd=inputs[0].data
-        xp = cp if xd.__class__ is cparray else np
+        xt0, = inputs
+        xd0 = xt0.data
+        xp = cp if xd0.__class__ is cparray else np
+        requires_grad = xt0.requires_grad
         if params['inplace']:
-            result = xp.log(xd, out=xd)
-            ctx.params = {'copy': xd.copy()}
+            ctx.params = {'copy': xd0.copy()}
+            yd0 = xp.log(xd0, out=xd0)
+            yd0._version += 1
+            yt0 = xt0
+            ctx.save_for_backward(None)
         else:
-            result = xp.log(xd)
-            ctx.save_for_backward(xd)
-        return result
+            yt0 = tt.tensor(xp.log(xd0), requires_grad=requires_grad, copy=False, _output_idx=0)
+            ctx.save_for_backward(xt0)
+        if requires_grad:
+            yt0.grad_fn = ctx
+        return yt0
+
     @staticmethod
-    def backward(ctx, *grad):
-        xd = ctx.params['copy'] if 'copy' in ctx.params else ctx.saved_tensors[0]
-        return grad[0] / xd
-def log(xt):
-    return Log.apply(xt, inplace=False)
-def log_(xt):
-    return Log.apply(xt, inplace=True)
+    def backward(ctx, *grad_outputs):
+        gd0, = grad_outputs
+        xd0, = ctx.saved_tensors
+        if xd0 is None:
+            xd0 = ctx.params['copy']
+        grad0 = gd0 / xd0
+        return grad0
+
+
+def log(input):
+    return Log.apply(input, inplace=False)
+
+
+def log_(input):
+    return Log.apply(input, inplace=True)
 
 
 class Abs(Function):
     @staticmethod
     def forward(ctx, *inputs, **params):
-        xd = inputs[0].data
-        xp = cp if xd.__class__ is cparray else np
+        xt0, = inputs
+        xd0 = xt0.data
+        xp = cp if xd0.__class__ is cparray else np
+        requires_grad = xt0.requires_grad
         if params['inplace']:
-            result = xp.abs(xd, out=xd)
-            ctx.params = {'copy': xd.copy()}
+            ctx.params = {'copy': xd0.copy()}
+            yd0 = xp.abs(xd0, out=xd0)
+            yd0._version += 1
+            yt0 = xt0
+            ctx.save_for_backward(None)
         else:
-            result = xp.abs(xd)
-            ctx.save_for_backward(xd)
-        return result
+            yt0 = tt.tensor(xp.abs(xd0), requires_grad=requires_grad, copy=False, _output_idx=0)
+            ctx.save_for_backward(xt0)
+        if requires_grad:
+            yt0.grad_fn = ctx
+        return yt0
+
     @staticmethod
-    def backward(ctx, *grad):
-        xp = cp if grad[0].__class__ is cparray else np
-        xd = ctx.params['copy'] if 'copy' in ctx.params else ctx.saved_tensors[0]
-        return grad[0] * xp.sign(xd)
-def abs(xt):
-    return Abs.apply(xt, inplace=False)
+    def backward(ctx, *grad_outputs):
+        gd0, = grad_outputs
+        xd0, = ctx.saved_tensors
+        if xd0 is None:
+            xd0 = ctx.params['copy']
+        xp = cp if gd0.__class__ is cparray else np
+        grad0 = gd0 * xp.sign(xd0)
+        return grad0
+
+
+def abs(input):
+    return Abs.apply(input, inplace=False)
+
+
 absolute = abs
-def abs_(xt):
-    return Abs.apply(xt, inplace=True)
 
 
+def abs_(input):
+    return Abs.apply(input, inplace=True)
 
 
-######################################################################################################################
-@register_gradients(np.multiply, cp.multiply)
-def backward(yt, grad, params):
-    p0,p1 = yt.parents[0],yt.parents[1]
-    xt0 = p0[0]
-    xt1 = p1[0]
-    if xt0.requires_grad:
-        xd1=get_data(p1)
-        xt0.grad += reverse_broadcast(grad * xd1, xt0.shape)
-    if xt1.requires_grad:
-        xd0=params['copy'] if 'copy' in params else get_data(p0)
-        xt1.grad += reverse_broadcast(grad * xd0, xt1.shape)
+class Pow(Function):
+    @staticmethod
+    def forward(ctx, *inputs, **params):
+        xt0, xt1 = inputs
+        xd0, xd1 = xt0.data, xt1.data
+        xp = cp if xd0.__class__ is cparray else np
+        requires_grad = xt0.requires_grad | xt1.requires_grad
+        if params['inplace']:
+            ctx.params = {'copy': xd0.copy()}
+            yd0 = xp.power(xd0, xd1, out=xd0)
+            yd0._version += 1
+            yt0 = xt0
+            ctx.save_for_backward(None, xt1, yt0)
+        else:
+            yt0 = tt.tensor(xp.power(xd0, xd1), requires_grad=requires_grad, copy=False, _output_idx=0)
+            ctx.save_for_backward(xt0, xt1, yt0)
+        if requires_grad:
+            yt0.grad_fn = ctx
+        ctx.params = {'shape':(xd0.shape, xd1.shape)}
+        return yt0
+
+    @staticmethod
+    def backward(ctx, *grad_outputs):
+        gd0, = grad_outputs
+        xd0_shape, xd1_shape = ctx.params['shape']
+        xd0, xd1, yd0 = ctx.saved_tensors
+        if xd0 is None:
+            xd0 = ctx.params['copy']
+        xp = cp if gd0.__class__ is cparray else np
+        grad0 = reverse_broadcast(gd0 * xd1 * yd0 / xd0, xd0_shape) if ctx.needs_input_grad[0] else None
+        grad1 = reverse_broadcast(gd0 * xp.log(xd0) * yd0, xd1_shape) if ctx.needs_input_grad[1] else None
+        return grad0, grad1
 
 
-@register_gradients(np.divide, cp.divide)
-def backward(yt, grad, params):
-    p0, p1 = yt.parents[0], yt.parents[1]
-    xt0 = p0[0] # numerator
-    xt1 = p1[0] # denominator
-    xd1 = get_data(p1)
-    if xt0.requires_grad:
-        xt0.grad += reverse_broadcast(grad / xd1, xt0.shape)
-    if xt1.requires_grad:
-        xd0 = params['copy'] if 'copy' in params else get_data(p0)
-        xt1.grad += reverse_broadcast(-grad * xd0 / (xd1 * xd1), xt1.shape)
+def pow(input, other):
+    return Pow.apply(input, other, inplace=False)
 
 
-@register_gradients(np.power, cp.power)
-def backward(tensor, grad, params):
-    xp = cp if grad.__class__ is cparray else np
-    inputs = tensor.parents
-    base = inputs[0]
-    power = inputs[1]
-    if base.requires_grad:
-        base.grad += grad * power.data * base.data ** xp.subtract(power.data, 1, dtype=grad.dtype)
-    if power.requires_grad:
-        power.grad += grad * xp.log(base.data) * tensor.data
+class Mul(Function):
+    @staticmethod
+    def forward(ctx, *inputs, **params):
+        xt0, xt1 = inputs
+        xd0, xd1 = xt0.data, xt1.data
+        xp = cp if xd0.__class__ is cparray else np
+        requires_grad = xt0.requires_grad | xt1.requires_grad
+        if params['inplace']:
+            if xt1.requires_grad:
+                ctx.params = {'copy': xd0.copy()}
+            yd0 = xp.multiply(xd0, xd1, out=xd0)
+            yd0._version += 1
+            yt0 = xt0
+            ctx.save_for_backward(None, xt1)
+        else:
+            yt0 = tt.tensor(xp.multiply(xd0, xd1), requires_grad=requires_grad, copy=False, _output_idx=0)
+            ctx.save_for_backward(xt0, xt1)
+        if requires_grad:
+            yt0.grad_fn = ctx
+        ctx.params = {'shape':(xd0.shape, xd1.shape)}
+        return yt0
+
+    @staticmethod
+    def backward(ctx, *grad_outputs):
+        gd0, = grad_outputs
+        xd0_shape, xd1_shape = ctx.params['shape']
+        if ctx.needs_input_grad[0]:
+            xd1 = get_data(ctx.to_save[1])
+            grad0 = reverse_broadcast(gd0 * xd1, xd0_shape)
+        else:
+            grad0 = None
+        if ctx.needs_input_grad[1]:
+            xd0 = ctx.params['copy'] if ctx.to_save[0] is None else get_data(ctx.to_save[0])
+            grad1 = reverse_broadcast(gd0 * xd0, xd1_shape)
+        else:
+            grad1 = None
+        return grad0, grad1
+
+
+def mul(input, other):
+    return Mul.apply(input, other, inplace=False)
+
+
+multiply = mul
+
+
+class Div(Function):
+    @staticmethod
+    def forward(ctx, *inputs, **params):
+        xt0, xt1 = inputs
+        xd0, xd1 = xt0.data, xt1.data
+        xp = cp if xd0.__class__ is cparray else np
+        requires_grad = xt0.requires_grad | xt1.requires_grad
+        if params['inplace']:
+            if xt1.requires_grad:
+                ctx.params = {'copy': xd0.copy()}
+            yd0 = xp.divide(xd0, xd1, out=xd0)
+            yd0._version += 1
+            yt0 = xt0
+            ctx.save_for_backward(None, xt1)
+        else:
+            yt0 = tt.tensor(xp.divide(xd0, xd1), requires_grad=requires_grad, copy=False, _output_idx=0)
+            ctx.save_for_backward(xt0, xt1)
+        if requires_grad:
+            yt0.grad_fn = ctx
+        ctx.params = {'shape':(xd0.shape, xd1.shape)}
+        return yt0
+
+    @staticmethod
+    def backward(ctx, *grad_outputs):
+        gd0, = grad_outputs
+        xd0_shape, xd1_shape = ctx.params['shape']
+        xd1 = get_data(ctx.to_save[1])
+        if ctx.needs_input_grad[0]:
+            grad0 = reverse_broadcast(gd0 / xd1, xd0_shape)
+        else:
+            grad0 = None
+        if ctx.needs_input_grad[1]:
+            xd0 = ctx.params['copy'] if ctx.to_save[0] is None else get_data(ctx.to_save[0])
+            grad1 = reverse_broadcast(-gd0 * xd0 / (xd1 * xd1), xd1_shape)
+        else:
+            grad1 = None
+        return grad0, grad1
+
+
+def div(input, other):
+    return Div.apply(input, other, inplace=False)
+
+
+divide = div
+
