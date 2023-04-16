@@ -1,4 +1,4 @@
-from tortto import np, cp, cparray, cupy_is_loaded, _int_zero
+from tortto import np, cp, nparray, cparray, cupy_is_loaded, _int_zero
 from .function import *
 from .helper import *
 
@@ -327,94 +327,99 @@ class Split(Function):
                 )
                 for j, sec in enumerate(sections)
             )
-        params['shape'] = xd0.shape
-        ctx.params = params
+        ctx.save_for_backward(xt0)
         if ytn.__class__ is not tuple:
             ytn = (ytn,)
+        params['output_shapes'] = tuple(yt.shape for yt in ytn)
+        ctx.params = params
         return ytn
     @staticmethod
     def backward(ctx, *grad_outputs):
-        ...
+        xt0, = ctx.saved_tensors
+        xp = cp if xt0.__class__ is cparray else np
+        output_shapes = ctx.params['output_shapes']
+        dim = ctx.params['dim']
+        grad0=xp.concatenate(
+            [
+                xp.zeros(output_shapes[i], dtype=xt0.dtype)
+                if gd is tt._int_zero
+                else gd for i, gd in enumerate(grad_outputs)
+            ],
+            axis=dim
+        )
+        return grad0
 def split(tensor, split_size_or_sections, dim=0):
     return Split.apply(tensor, split_size_or_sections=split_size_or_sections, dim=dim)
 
-
-
-
-
-def chunk(x, chunks, dim=0):
-    x_data = x.data
-    dim_size = x_data.shape[dim]
-    if dim < 0:
-        dim += x_data.ndim
+def chunk(input, chunks, dim=0):
+    dim_size = input.shape[dim]
+    if dim<0:
+        dim+=input.ndim
     chunk_size = dim_size // chunks + (dim_size % chunks != 0)
-    return tuple(x[tuple(slice(None) if i != dim else slice(j, j + chunk_size) for i in range(x_data.ndim))] for j in
-                 range(0, dim_size, chunk_size))
+    return Split.apply(input, split_size_or_sections=chunk_size, dim=dim)
 
-def _cuda(x):
-    if x.data.__class__ is cparray:
-        return x
-    else:
-        if not cupy_is_loaded:
-            raise RuntimeError("cupy not installed, can't use cuda")
-        value = cparray(x.data)
-        return build_links(value, x.requires_grad, _cuda, x)
-
-
-@register_gradients(_cuda)
-def backward(tensor, grad, params):
-    inputs = tensor.parents
-    if inputs[0].requires_grad:
-        inputs[0].grad += grad.get()
-
-
-def _cpu(x):
-    if x.data.__class__ is cparray:
-        value = x.data.get()
-        return build_links(value, x.requires_grad, _cpu, x)
-    else:
-        return x
-
-
-@register_gradients(_cpu)
-def backward(tensor, grad, params):
-    inputs = tensor.parents
-    if inputs[0].requires_grad:
-        inputs[0].grad += cp.array(grad)
-
-
-def _repeat(x, *sizes):
-    x_data = x.data
-    xp = cp if x_data.__class__ is cparray else np
-    value = xp.tile(x_data, sizes)
-    return build_links(value, x.requires_grad, _repeat, x, sizes=sizes, x_shape=x_data.shape)
-
-
-@register_gradients(_repeat)
-def backward(tensor, grad, params):
-    inputs = tensor.parents
-    if inputs[0].requires_grad:
-        sizes = params['sizes']
-        x_shape = params['x_shape']
-        new_shape = []
-        sum_axes = []
-        idx = 0
-        for i in range(-len(sizes), 0):
-            if -i > len(x_shape):
-                new_shape.append(sizes[i])
-                sum_axes.append(idx)
-                idx += 1
+class ToCopy(Function):
+    @staticmethod
+    def forward(ctx, *inputs, **params):
+        xt0, = inputs
+        xd0 = xt0.data
+        target_device = params['target_device']
+        requires_grad = xt0.requires_grad
+        if xd0.__class__ is cparray:
+            if target_device == 'cuda':
+                return xt0
             else:
-                if sizes[i] == 1:
-                    new_shape.append(x_shape[i])
-                    idx += 1
-                else:
-                    new_shape.extend([sizes[i], x_shape[i]])
-                    sum_axes.append(idx)
-                    idx += 2
-        inputs[0].grad += grad.reshape(new_shape).sum(tuple(sum_axes))
+                yt0=tt.tensor(xd0.get(), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx)
+        else:
+            if target_device == 'cpu':
+                return xt0
+            else:
+                if not cupy_is_loaded:
+                    raise RuntimeError("cupy not installed, can't use cuda")
+                yt0=tt.tensor(cparray(xd0), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx)
+        ctx.params = params
+        return yt0
+    @staticmethod
+    def backward(ctx, *grad_outputs):
+        gd0, = grad_outputs
+        target_device = ctx.params['target_device']
+        if target_device == 'cpu':
+            grad0=cparray(gd0)
+        else:
+            grad0=tt.nparray(gd0.get())
+        return grad0
 
 
+class Repeat(Function):
+    @staticmethod
+    def forward(ctx, *inputs, **params):
+        xt0, = inputs
+        xd0 = xt0.data
+        sizes = params['sizes']
+        requires_grad = xt0.requires_grad
+        xp = cp if xd0.__class__ is cparray else np
+        yt0=tt.tensor(xp.tile(xd0, sizes), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx)
+        params['shape']=xd0.shape
+        params['yt0_strides']=yt0.strides
+        ctx.params = params
+        return yt0
+    @staticmethod
+    def backward(ctx, *grad_outputs):
+        gd0,=grad_outputs
+        sizes = ctx.params['sizes']
+        xd0_shape = ctx.params['shape']
+        yt0_strides=ctx.params['yt0_strides']
+        xd0_ndim=len(xd0_shape)
+        leading_dims=tuple(range(len(sizes)))
+        xp = cp if gd0.__class__ is cparray else np
+        target_shape=sizes+xd0_shape
+        target_strides = yt0_strides[:-xd0_ndim]+\
+                         tuple(xd0_shape[i]*yt0_strides[i-xd0_ndim] for i in range(xd0_ndim))+ \
+                         yt0_strides[-xd0_ndim:]
+        grad0=xp.lib.stride_tricks.as_strided(gd0, shape=target_shape, strides=target_strides).sum(leading_dims)
+        return grad0
+
+#############################################################################
 def _expand(x, *dims):
     x_data = x.data
     x_shape = x_data.shape

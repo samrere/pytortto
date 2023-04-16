@@ -2,7 +2,7 @@ import tortto
 from tortto import np, cp, cparray, nparray,_int_zero
 from .VariableFunctions import *
 from .autograd.grad_fcn import *
-from .autograd.grad_fcn import _repeat, _expand, _cuda, _cpu
+from .autograd.grad_fcn import _expand
 from .autograd.grad_ufunc import *
 
 int16 = np.int16
@@ -20,7 +20,7 @@ default_dtype = {int64, float32, complex64, np.bool_}
 
 class Tensor:
     def __init__(self, data, requires_grad=False, dtype=float32, copy=True, **kwargs):
-        if data.__class__ is cparray:
+        if data.__class__ is cparray or data.__class__ is cp.ndarray:
             data = cparray(data, dtype=dtype, copy=copy)
         else:
             data = nparray(data, dtype=dtype, copy=copy)
@@ -324,10 +324,10 @@ class Tensor:
         return self.data.data.ptr if self.data.__class__ is cparray else self.data.ctypes.data
 
     def cuda(self):
-        return _cuda(self)
+        return ToCopy.apply(self, target_device='cuda')
 
     def cpu(self):
-        return _cpu(self)
+        return ToCopy.apply(self, target_device='cpu')
 
     def detach(self):
         # same as pytorch, where detached tensor share the same data with the original one.
@@ -415,7 +415,9 @@ class Tensor:
         return split(self, split_size_or_sections, dim=dim)
 
     def repeat(self, *sizes):
-        return _repeat(self, *sizes)
+        if sizes[0].__class__ is tuple:
+            sizes=sizes[0]
+        return Repeat.apply(self, sizes=sizes)
 
     def expand(self, *sizes):
         return _expand(self, *sizes)
@@ -485,7 +487,7 @@ class Tensor:
             gradient = gradient.data
         if self.data.shape != gradient.shape:
             raise RuntimeError(f"grad can be implicitly created only for scalar outputs")
-        self.grad_fn.grad[0] = gradient
+        self.grad_fn.grad[self._output_idx] = gradient
         for grad_fn in toposort(self.grad_fn):
             gradient = grad_fn.apply(*grad_fn.grad)
             for i in range(len(grad_fn.next_functions)):

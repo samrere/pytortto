@@ -12,6 +12,7 @@ def manual_seed(seed):
 
 def _values_like(fcn, tensor, **kwargs):
     dtype = kwargs.get('dtype')
+
     return tt.Tensor(fcn(tensor.data, dtype=dtype), dtype=dtype, copy=False, **kwargs)
 
 
