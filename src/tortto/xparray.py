@@ -4,7 +4,6 @@ class nparray(np.ndarray):
     def __new__(cls, input_array, *args, **kwargs):
         obj = np.array(input_array, *args, **kwargs).view(cls)
         obj._version = 0
-
         return obj
     def __array_finalize__(self, obj):
         if obj is None: return

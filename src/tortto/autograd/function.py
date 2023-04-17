@@ -78,16 +78,13 @@ class Function(FunctionBase):
             needs_input_grad.append(i.requires_grad)
             if i.requires_grad:
                 if i.grad_fn is None:
-                    if params.get('inplace') is True:
-                        raise RuntimeError('a leaf Variable that requires grad is being used in an in-place operation.')
-                    else:
-                        # create an AccumulateGrad object and link
-                        acc_grad = AccumulateGrad()
-                        acc_grad.variable = i
-                        acc_grad.prev_function_counts+=1
-                        acc_grad.grad = [tt._int_zero]
-                        acc_grad.next_functions=tuple()
-                        next_functions.append((acc_grad, 0))
+                    # create an AccumulateGrad object and link
+                    acc_grad = AccumulateGrad()
+                    acc_grad.variable = i
+                    acc_grad.prev_function_counts+=1
+                    acc_grad.grad = [tt._int_zero]
+                    acc_grad.next_functions=tuple()
+                    next_functions.append((acc_grad, 0))
                 else:
                     i.grad_fn.prev_function_counts+=1
                     next_functions.append((i.grad_fn, i._output_idx))

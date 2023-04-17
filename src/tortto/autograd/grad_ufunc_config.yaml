@@ -114,8 +114,8 @@ Sub:
   num_inputs: 2
   num_outputs: 1
   allow_inplace: True
-  forward_inplace: xp.sub(..., ///, out=...)
-  forward_outplace: xp.sub(..., ///)
+  forward_inplace: xp.subtract(..., ///, out=...)
+  forward_outplace: xp.subtract(..., ///)
   save_for_backward:
   params: shape
   backward: ["reverse_broadcast(gd0, xd..._shape)", "-reverse_broadcast(gd0, xd..._shape)"]

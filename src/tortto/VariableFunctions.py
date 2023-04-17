@@ -75,7 +75,7 @@ def linspace(start, end, steps, **kwargs):
     return tt.Tensor([np.linspace(start, end, steps)], **kwargs)
 
 
-def tensor(data, requires_grad=False, dtype=None, copy=True, **kwargs):
+def tensor(data, requires_grad=False, dtype=None, copy=True, _version=None,**kwargs):
     if isinstance(data, tt.Tensor):
         warnings.warn('Input is already a tensor, returning without deepcopy', UserWarning)
     else:
@@ -83,8 +83,10 @@ def tensor(data, requires_grad=False, dtype=None, copy=True, **kwargs):
             dtype = getattr(data, 'dtype', tt.float32)
         if 'grad_fn' in kwargs and not requires_grad:
             kwargs['grad_fn'] = None
-        return tt.Tensor(data, requires_grad=requires_grad, dtype=dtype, copy=copy, **kwargs)
-
+        result = tt.Tensor(data, requires_grad=requires_grad, dtype=dtype, copy=copy, **kwargs)
+        if _version is not None:
+            result.data._version = _version
+        return result
 
 def flatten(x, start_dim=0, end_dim=-1):
     shape = x.shape

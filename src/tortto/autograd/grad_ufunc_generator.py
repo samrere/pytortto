@@ -47,17 +47,18 @@ special = """class Mul(Function):
         xp = cp if xd0.__class__ is cparray else np
         requires_grad = xt0.requires_grad | xt1.requires_grad
         if params['inplace']:
+            inplace_precheck(xt0)
             if xt1.requires_grad:
                 ctx.params = {'copy': xd0.copy()}
             yd0 = xp.multiply(xd0, xd1, out=xd0)
             yd0._version += 1
             yt0 = xt0
+            yt0.requires_grad = requires_grad
+            yt0.grad_fn = ctx
             ctx.save_for_backward(None, xt1)
         else:
-            yt0 = tt.tensor(xp.multiply(xd0, xd1), requires_grad=requires_grad, copy=False, _output_idx=0)
+            yt0 = tt.tensor(xp.multiply(xd0, xd1), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx)
             ctx.save_for_backward(xt0, xt1)
-        if requires_grad:
-            yt0.grad_fn = ctx
         ctx.params = {'shape':(xd0.shape, xd1.shape)}
         return yt0
 
@@ -93,17 +94,18 @@ class Div(Function):
         xp = cp if xd0.__class__ is cparray else np
         requires_grad = xt0.requires_grad | xt1.requires_grad
         if params['inplace']:
+            inplace_precheck(xt0)
             if xt1.requires_grad:
                 ctx.params = {'copy': xd0.copy()}
             yd0 = xp.divide(xd0, xd1, out=xd0)
             yd0._version += 1
             yt0 = xt0
+            yt0.requires_grad = requires_grad
+            yt0.grad_fn = ctx
             ctx.save_for_backward(None, xt1)
         else:
-            yt0 = tt.tensor(xp.divide(xd0, xd1), requires_grad=requires_grad, copy=False, _output_idx=0)
+            yt0 = tt.tensor(xp.divide(xd0, xd1), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx)
             ctx.save_for_backward(xt0, xt1)
-        if requires_grad:
-            yt0.grad_fn = ctx
         ctx.params = {'shape':(xd0.shape, xd1.shape)}
         return yt0
 
@@ -185,20 +187,19 @@ def generate_grad_ufunc():
                     c(f"requires_grad = {' | '.join(f'xt{i}.requires_grad' for i in range(num_inputs))}")
                     if allow_inplace:  # only single output if inplace
                         with indent(f"if params['inplace']:"):
+                            c('inplace_precheck(xt0)')
                             if copy_xt0:
                                 c("ctx.params = {'copy': xd0.copy()}")
                             c(f"yd0 = {forward_inplace.replace('...', 'xd0').replace('///', 'xd1')}")
-                            c("yd0._version += 1\nyt0 = xt0")
+                            c("yd0._version += 1\nyt0 = xt0\nyt0.requires_grad = requires_grad\nyt0.grad_fn = ctx")
                             if copy_xt0:
                                 c(f"ctx.save_for_backward({save_for_backward})")
                         with indent('else:'):
-                            c(f"yt0 = tt.tensor({forward_outplace.replace('...', 'xd0').replace('///', 'xd1')}, requires_grad=requires_grad, copy=False, _output_idx=0)")
+                            c(f"yt0 = tt.tensor({forward_outplace.replace('...', 'xd0').replace('///', 'xd1')}, requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx)")
                             if copy_xt0:
                                 c(f"ctx.save_for_backward({save_for_backward_original})")
                     else:
-                        c(f"yt0 = tt.tensor({forward_outplace.replace('...', 'xd0').replace('///', 'xd1')}, requires_grad=requires_grad, copy=False, _output_idx=0)")
-                    with indent("if requires_grad:"):
-                        c("yt0.grad_fn = ctx")
+                        c(f"yt0 = tt.tensor({forward_outplace.replace('...', 'xd0').replace('///', 'xd1')}, requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx)")
                     if save_for_backward is not None and copy_xt0 is False:
                         c(f"ctx.save_for_backward({save_for_backward})")
                     if params:

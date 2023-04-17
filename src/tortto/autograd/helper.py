@@ -2,6 +2,11 @@ import tortto as tt
 from .grad_mode import is_grad_enabled
 import tortto.autograd as au
 
+def inplace_precheck(*tensors):
+    for t in tensors:
+        if t.requires_grad and t.grad_fn is None:
+            raise RuntimeError(f"a leaf Variable that requires grad is being used in an in-place operation.")
+
 def get_data(pair):
     if pair is None:
         return None
@@ -27,34 +32,6 @@ def reverse_broadcast(result, target_shape: tuple):
     result = result.squeeze(dim0)
     return result
 
-
-# def count_children_and_parents(end_node):
-#     """
-#     link children during backward
-#     """
-#     parent_counts = dict()
-#     child_counts = dict()
-#     stack={end_node}
-#     visited=set()
-#     child_counts[end_node]=1 # put end_node into child_counts
-#     while stack:
-#         node=stack.pop()
-#         visited.add(node)
-#         parent_counts[node]=len(node.parents)
-#         for p in node.parents:
-#             if p is None: # ignore None parents (i.e. bias is False in Linear)
-#                 parent_counts[node]-=1
-#                 continue
-#             p.children.add(node) # link children
-#             if p not in child_counts:
-#                 child_counts[p]=1
-#             else:
-#                 child_counts[p]+=1
-#             if p not in visited:
-#                 stack.add(p)
-#     return child_counts, parent_counts
-#
-#
 def toposort(end_node):
     # yield childless node
     childless_nodes = [end_node]

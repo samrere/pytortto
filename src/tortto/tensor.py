@@ -2,7 +2,6 @@ import tortto
 from tortto import np, cp, cparray, nparray,_int_zero
 from .VariableFunctions import *
 from .autograd.grad_fcn import *
-from .autograd.grad_fcn import _expand
 from .autograd.grad_ufunc import *
 
 int16 = np.int16
@@ -53,7 +52,9 @@ class Tensor:
 
     @property
     def T(self):
-        return transpose(self)
+        if self.ndim!=2:
+            raise RuntimeError(f"x.T expects a tensor with 2 dimensions, but self is {self.ndim}D")
+        return permute(self, (1,0))
 
     @property
     def device(self):
@@ -420,7 +421,9 @@ class Tensor:
         return Repeat.apply(self, sizes=sizes)
 
     def expand(self, *sizes):
-        return _expand(self, *sizes)
+        if sizes[0].__class__ is tuple:
+            sizes=sizes[0]
+        return Expand.apply(self, sizes=sizes)
 
     def squeeze(self, dim=None):
         return squeeze(self, dim=dim)
@@ -442,6 +445,9 @@ class Tensor:
 
     def masked_fill(self, mask, val):
         return masked_fill(self, mask, val)
+
+    def masked_fill_(self, mask, val):
+        return masked_fill_(self, mask, val)
 
     def argmax(self, dim=None, keepdim=False):
         return argmax(self, dim, keepdim)

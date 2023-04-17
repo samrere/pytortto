@@ -4,14 +4,14 @@ from .helper import *
 
 buildin_sum = sum
 
-class Permute(Function):
+class Permute(Function): # keep input _version: True
     @staticmethod
     def forward(ctx, *inputs, **params):
         xt0, = inputs
         xd0 = xt0.data
         xp = cp if xd0.__class__ is cparray else np
         requires_grad = xt0.requires_grad
-        yt0 = tt.tensor(xp.transpose(xd0, params['dims']), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn = ctx)
+        yt0 = tt.tensor(xp.transpose(xd0, params['dims']), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx, _version=xd0._version)
         ctx.params = params
         return yt0
     @staticmethod
@@ -36,7 +36,7 @@ def moveaxis(input, source, destination):
     dims.insert(destination, dims.pop(source))
     return Permute.apply(input, dims=dims)
 
-class Transpose(Function):
+class Transpose(Function): # keep input _version: True
     @staticmethod
     def forward(ctx, *inputs, **params):
         xt0, = inputs
@@ -44,7 +44,7 @@ class Transpose(Function):
         xp = cp if xd0.__class__ is cparray else np
         requires_grad = xt0.requires_grad
         dim0, dim1 = params['dim0'], params['dim1']
-        yt0 = tt.tensor(xp.swapaxes(xd0, dim0,dim1), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn = ctx)
+        yt0 = tt.tensor(xp.swapaxes(xd0, dim0,dim1), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx, _version=xd0._version)
         ctx.params = params
         return yt0
     @staticmethod
@@ -242,13 +242,13 @@ class Cat(Function):
 def cat(tensors, dim=0):
     return Cat.apply(*tensors, dim=dim)
 
-class Slice(Function):
+class Slice(Function): # keep input _version: True
     @staticmethod
     def forward(ctx, *inputs, **params):
         xt0, = inputs
         xd0 = xt0.data
         requires_grad = xt0.requires_grad
-        yt0 = tt.tensor(xd0[params['key']], requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn = ctx)
+        yt0 = tt.tensor(xd0[params['key']], requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn = ctx, _version=xd0._version)
         params['shape']=xd0.shape
         ctx.params = params
         return yt0
@@ -264,13 +264,13 @@ class Slice(Function):
         return grad0
 
 
-class View(Function):
+class View(Function): # keep input _version: True
     @staticmethod
     def forward(ctx, *inputs, **params):
         xt0, = inputs
         xd0 = xt0.data
         requires_grad = xt0.requires_grad
-        yt0 = tt.tensor(xd0.reshape(params['shape']), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn = ctx)
+        yt0 = tt.tensor(xd0.reshape(params['shape']), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx, _version=xd0._version)
         params['shape'] = xd0.shape
         ctx.params = params
         return yt0
@@ -280,7 +280,7 @@ class View(Function):
         grad0=gd0.reshape(ctx.params['shape'])
         return grad0
 
-class Split(Function):
+class Split(Function): # keep input _version: True
     @staticmethod
     def forward(ctx, *inputs, **params):
         xt0, = inputs
@@ -303,7 +303,8 @@ class Split(Function):
                     requires_grad=requires_grad,
                     copy=False,
                     _output_idx=j//split_size,
-                    grad_fn=ctx
+                    grad_fn=ctx,
+                    _version=xd0._version
                 )
                 for j in range(0, dim_size, split_size)
             )
@@ -323,7 +324,8 @@ class Split(Function):
                     requires_grad=requires_grad,
                     copy=False,
                     _output_idx=j,
-                    grad_fn=ctx
+                    grad_fn=ctx,
+                    _version=xd0._version
                 )
                 for j, sec in enumerate(sections)
             )
@@ -358,7 +360,7 @@ def chunk(input, chunks, dim=0):
     chunk_size = dim_size // chunks + (dim_size % chunks != 0)
     return Split.apply(input, split_size_or_sections=chunk_size, dim=dim)
 
-class ToCopy(Function):
+class ToCopy(Function): # keep input _version: False
     @staticmethod
     def forward(ctx, *inputs, **params):
         xt0, = inputs
@@ -390,7 +392,7 @@ class ToCopy(Function):
         return grad0
 
 
-class Repeat(Function):
+class Repeat(Function): # keep input _version: False
     @staticmethod
     def forward(ctx, *inputs, **params):
         xt0, = inputs
@@ -419,97 +421,149 @@ class Repeat(Function):
         grad0=xp.lib.stride_tricks.as_strided(gd0, shape=target_shape, strides=target_strides).sum(leading_dims)
         return grad0
 
-#############################################################################
-def _expand(x, *dims):
-    x_data = x.data
-    x_shape = x_data.shape
-    leading_dim = len(dims) - len(x_shape)
-    dims = np.array(dims)
-    x_shape = np.array((1,) * leading_dim + x_data.shape)  # add singleton to match dims
-    singleton = np.logical_and(x_shape == 1, dims > 1)
-    dims[~singleton] = x_shape[~singleton]  # new shape
-    strides = np.array((0,) * leading_dim + x_data.strides)
-    strides[singleton] = 0
-    xp = cp if x_data.__class__ is cparray else np
-    value = xp.lib.stride_tricks.as_strided(x_data, shape=dims, strides=strides)
-    return build_links(value, x.requires_grad, _expand, x, sum_axes=tuple(np.arange(len(dims))[singleton]),
-                       leading_dim=tuple(range(leading_dim)))
 
+class Expand(Function): # keep input _version: True
+    @staticmethod
+    def forward(ctx, *inputs, **params):
+        xt0, = inputs
+        xd0 = xt0.data
+        sizes = params['sizes']
+        requires_grad = xt0.requires_grad
+        xp = cp if xd0.__class__ is cparray else np
+        leading_dims = len(sizes) - len(xd0.shape)
+        strides = [0] * leading_dims + list(xd0.strides)
+        xd0_singleton_dims = [] # singleton axes to be summed during backward
+        for i in range(len(sizes)):
+            if i < leading_dims: # leading dimensions
+                if sizes[i]<=0:
+                    raise RuntimeError(f"The expanded size of the tensor ({sizes[i]}) isn't allowed in a leading, "
+                                       f"non-existing dimension {i}")
+            else:
+                i-=len(sizes) # for non-leading dimensions, count backward
+                if xd0.shape[i]==1:
+                    if sizes[i]>1:
+                        xd0_singleton_dims.append(i)
+                        strides[i]=0
+                else:
+                    if sizes[i]!=-1 and xd0.shape[i]!=sizes[i]:
+                        raise RuntimeError(f"The expanded size of the tensor ({sizes[i]}) must match the existing size "
+                                           f"({xd0.shape[i]}) at non-singleton dimension {i+len(sizes)}.  "
+                                           f"Target sizes: {sizes}.  Tensor sizes: {xd0.shape}")
+        value = xp.lib.stride_tricks.as_strided(xd0, shape=sizes, strides=strides)
+        yt0 = tt.tensor(value, requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx)
+        yt0.data._version = xd0._version
+        ctx.params = {'xd0_singleton_dims':xd0_singleton_dims, 'leading_dims':leading_dims}
+        return yt0
+    @staticmethod
+    def backward(ctx, *grad_outputs):
+        gd0, = grad_outputs
+        xd0_singleton_dims = tuple(ctx.params['xd0_singleton_dims'])
+        leading_dims = tuple(range(ctx.params['leading_dims']))
+        grad0=gd0.sum(xd0_singleton_dims+leading_dims, keepdims=True).squeeze(leading_dims)
+        return grad0
 
-@register_gradients(_expand)
-def backward(tensor, grad, params):
-    inputs = tensor.parents
-    if inputs[0].requires_grad:
-        sum_axes = params['sum_axes']
-        leading_dim = params['leading_dim']
-        inputs[0].grad += grad.sum(sum_axes, keepdims=True).squeeze(leading_dim)
-
-
-def squeeze(x, dim=None):
-    x_data = x.data
-    x_shape = x_data.shape
-    if dim.__class__ is int:
-        dim = (dim,)
-    if dim is None:
-        dim = tuple(range(x_data.ndim))
-    unchanged = False
-    dim = tuple(i for i in dim if x_shape[i] == 1)
-    if len(dim) == 0:
-        value = x_data.copy()
-        unchanged = True
-    else:
-        xp = cp if x_data.__class__ is cparray else np
-        value = xp.squeeze(x_data, dim)
-    return build_links(value, x.requires_grad, squeeze, x, dim=dim, unchanged=unchanged)
-
-
-@register_gradients(squeeze)
-def backward(tensor, grad, params):
-    inputs = tensor.parents
-    if inputs[0].requires_grad:
-        unchanged = params['unchanged']
-        if unchanged:
-            inputs[0].grad += grad
-        else:
-            xp = cp if grad.__class__ is cparray else np
-            dim = params['dim']  # dim is a tuple
-            inputs[0].grad += xp.expand_dims(grad, dim)
-
-
-def unsqueeze(x, dim):
-    x_data = x.data
-    xp = cp if x_data.__class__ is cparray else np
-    value = xp.expand_dims(x_data, dim)
-    return build_links(value, x.requires_grad, unsqueeze, x, dim=dim)
-
-
-@register_gradients(unsqueeze)
-def backward(tensor, grad, params):
-    inputs = tensor.parents
-    if inputs[0].requires_grad:
+class Squeeze(Function): # keep input _version: True
+    @staticmethod
+    def forward(ctx, *inputs, **params):
+        xt0, = inputs
+        xd0 = xt0.data
         dim = params['dim']
-        xp = cp if grad.__class__ is cparray else np
-        inputs[0].grad += xp.squeeze(grad, dim)
-
-
-def masked_fill(x, mask, val):
-    value = x.data.copy()
-    xp = cp if value.__class__ is cparray else np
-    mask = xp.lib.stride_tricks.as_strided(mask.data, shape=value.shape,
-                                           strides=(0,) * (value.ndim - mask.ndim) + mask.strides)
-    value[mask] = val
-    return build_links(value, x.requires_grad, masked_fill, x, mask=mask)
-
-
-@register_gradients(masked_fill)
-def backward(tensor, grad, params):
-    inputs = tensor.parents
-    if inputs[0].requires_grad:
-        mask = ~params['mask']  # take not to mask, take grad that are not masked
-        xp = cp if grad.__class__ is cparray else np
-        if inputs[0].grad is _int_zero:
-            value = xp.zeros_like(grad)
-            value[mask] = grad[mask]
-            inputs[0].grad += value
+        if dim.__class__ is int:
+            dim = (dim,)
+        if dim is None:
+            dim = tuple(range(xd0.ndim))
+        requires_grad = xt0.requires_grad
+        squeeze_dims=tuple(i for i in dim if xd0.shape[i] == 1)
+        if len(squeeze_dims) == 0:
+            yt0=tt.tensor(xd0, requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx, _version=xd0._version)
         else:
-            inputs[0].grad[mask] += grad[mask]
+            xp = cp if xd0.__class__ is cparray else np
+            yt0 = tt.tensor(xp.squeeze(xd0, squeeze_dims), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx, _version=xd0._version)
+        ctx.params={'squeeze_dims':squeeze_dims}
+        return yt0
+    @staticmethod
+    def backward(ctx, *grad_outputs):
+        gd0, = grad_outputs
+        squeeze_dims = ctx.params['squeeze_dims']
+        xp = cp if gd0.__class__ is cparray else np
+        grad0 = xp.expand_dims(gd0, squeeze_dims)
+        return grad0
+def squeeze(input, dim=None):
+    return Squeeze.apply(input, dim=dim)
+
+class Unsqueeze(Function): # keep input _version: True
+    @staticmethod
+    def forward(ctx, *inputs, **params):
+        xt0, = inputs
+        xd0 = xt0.data
+        dim = params['dim']
+        requires_grad = xt0.requires_grad
+        xp = cp if xd0.__class__ is cparray else np
+        yt0 = tt.tensor(xp.expand_dims(xd0, dim), requires_grad=requires_grad, copy=False, _output_idx=0,
+                        grad_fn=ctx, _version=xd0._version)
+        ctx.params=params
+        return yt0
+    @staticmethod
+    def backward(ctx, *grad_outputs):
+        gd0, = grad_outputs
+        dim = ctx.params['dim']
+        xp = cp if gd0.__class__ is cparray else np
+        grad0 = xp.squeeze(gd0, dim)
+        return grad0
+def unsqueeze(input, dim):
+    return Unsqueeze.apply(input, dim=dim)
+
+class MaskedFill(Function): # keep input _version: False (except in-place)
+    @staticmethod
+    def forward(ctx, *inputs, **params):
+        xt0, xt1 = inputs
+        xd0, xd1 = xt0.data, xt1.data
+        if xt1.ndim > 0:
+            raise RuntimeError(f"masked_fill only supports a 0-dimensional value tensor, "
+                               f"but got tensor with {xt1.ndim} dimension(s).")
+        mask = params['mask']
+        if mask.dtype.type is not np.bool_:
+            print(mask.dtype.type)
+            raise RuntimeError(f"dtype of mask must be bool. "
+                               f"Pass dtype=bool when constructing mask")
+
+        requires_grad = xt0.requires_grad | xt1.requires_grad
+        key=(slice(None),)*(xd0.ndim-mask.ndim)+(mask.data,)
+        if params['inplace']:
+            inplace_precheck(xt0)
+            xd0[key]=xt1.data
+            xd0._version+=1
+            yt0 = xt0
+            yt0.requires_grad=requires_grad
+            yt0.grad_fn=ctx
+        else:
+            xd0=xd0.copy()
+            xd0[key]=xt1.data
+            yt0=tt.tensor(xd0, requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx)
+        ctx.params=params
+        return yt0
+    @staticmethod
+    def backward(ctx, *grad_outputs):
+        gd0, = grad_outputs
+        mask = ctx.params['mask']
+        leading = (slice(None),) * (gd0.ndim - mask.ndim)
+        xp = cp if gd0.__class__ is cparray else np
+        grad0, grad1 = None, None
+        if ctx.needs_input_grad[0]: # grad for input
+            not_key = leading + (~mask.data,)
+            grad0 = xp.zeros_like(gd0)
+            grad0[not_key] = gd0[not_key]
+        if ctx.needs_input_grad[1]: # grad for value
+            key = leading + (mask.data,)
+            grad1=gd0[key].sum()
+        return grad0, grad1
+
+def masked_fill(input, mask, value):
+    if value.__class__ is not tt.Tensor:
+        value=tt.tensor(value, copy=False)
+    return MaskedFill.apply(input, value, mask=mask, inplace=False)
+def masked_fill_(input, mask, value):
+    if value.__class__ is not tt.Tensor:
+        value=tt.tensor(value, copy=False)
+    return MaskedFill.apply(input, value, mask=mask, inplace=True)
+
