@@ -1,13 +1,18 @@
 import numpy as np
+
+
 np.set_printoptions(precision=4)
 class nparray(np.ndarray):
     def __new__(cls, input_array, *args, **kwargs):
         obj = np.array(input_array, *args, **kwargs).view(cls)
-        obj._version = 0
+        obj._version = [0]
         return obj
     def __array_finalize__(self, obj):
         if obj is None: return
-        self._version = getattr(obj, '_version', 0)
+        if self.base.__class__ is nparray: # it's a view of nparray
+            self._version = obj._version
+        else:
+            self._version = [0]
 
 
 # cupy
@@ -29,12 +34,29 @@ if cupy_is_loaded:
     class cparray(cp.ndarray):
         def __new__(cls, input_array, *args, **kwargs):
             obj = cp.array(input_array, *args, **kwargs).view(cls)
-            obj._version = 0
-
+            obj._version = [0]
             return obj
         def __array_finalize__(self, obj):
             if obj is None: return
-            self._version = getattr(obj, '_version', 0)
+            if self.base is not None:  # it's a view of cparray
+                self._version = getattr(obj, '_version', [0])
+            else:
+                self._version = [0]
 
 
     cp.set_printoptions(precision=4)
+if __name__ == '__main__':
+    # keep version when operation is a view
+    x=nparray([[1,2,3],[4,5,6]])
+    x._version[0]+=100
+    y=x[0,:2]
+    print(f'y version: {y._version}')
+    z=x+1
+    print(f'z version: {z._version}')
+
+    x = cparray([[1, 2, 3], [4, 5, 6]])
+    x._version[0] += 100
+    y = cp.transpose(x, (1,0))
+    print(f'y version: {y._version}')
+    z = cp.sqrt(x)
+    print(f'z version: {z._version}')

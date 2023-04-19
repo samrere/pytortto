@@ -7,14 +7,21 @@ def inplace_precheck(*tensors):
         if t.requires_grad and t.grad_fn is None:
             raise RuntimeError(f"a leaf Variable that requires grad is being used in an in-place operation.")
 
+def inplace_update(tensor, requires_grad, grad_fn):
+    tensor.data._version[0] += 1
+    tensor._output_idx = 0
+    tensor.requires_grad = requires_grad
+    if requires_grad:
+        tensor.grad_fn = grad_fn
+
 def get_data(pair):
     if pair is None:
         return None
-    tensor, version = pair
+    tensor, version = pair # version is saved as an int, not a list
     if tensor._version == version:
         return tensor.data
     else:
-        msg='' if tensor.grad_fn is None else f', which is the output of {tensor.grad_fn.__name__},'
+        msg='' if tensor.grad_fn is None else f', which is the output of {tensor.grad_fn.__class__.__name__},'
         raise RuntimeError(f'one of the variables needed for gradient computation has been modified '
                            f'by an inplace operation: [shape: {tensor.shape}]{msg} is at version '
                            f'{tensor._version}; expected version {version} instead.')
@@ -55,10 +62,12 @@ def toposort(end_node):
             for fn,_ in node.next_functions:
                 if fn is None:
                     continue
+                fn.prev_function_counts -= 1
                 if fn.prev_function_counts == 0:
                     childless_nodes.append(fn)
+                    if fn in candidate:
+                        candidate.remove(fn)
                 else:
-                    fn.prev_function_counts -= 1
                     candidate.add(fn)
 
 ###################

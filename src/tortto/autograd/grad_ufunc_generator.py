@@ -1,5 +1,5 @@
 from pathlib import Path
-
+import os
 import yaml
 
 to_save = ['']
@@ -49,33 +49,29 @@ special = """class Mul(Function):
         if params['inplace']:
             inplace_precheck(xt0)
             if xt1.requires_grad:
-                ctx.params = {'copy': xd0.copy()}
-            yd0 = xp.multiply(xd0, xd1, out=xd0)
-            yd0._version += 1
+                params['copy'] = xd0.copy()
+            xp.multiply(xd0, xd1, out=xd0)
             yt0 = xt0
-            yt0.requires_grad = requires_grad
-            yt0.grad_fn = ctx
+            inplace_update(yt0, requires_grad, ctx)
             ctx.save_for_backward(None, xt1)
         else:
             yt0 = tt.tensor(xp.multiply(xd0, xd1), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx)
             ctx.save_for_backward(xt0, xt1)
-        ctx.params = {'shape':(xd0.shape, xd1.shape)}
+        params['shape'] = (xd0.shape, xd1.shape)
+        ctx.params = params
         return yt0
 
     @staticmethod
     def backward(ctx, *grad_outputs):
         gd0, = grad_outputs
         xd0_shape, xd1_shape = ctx.params['shape']
+        grad0, grad1 = None, None
         if ctx.needs_input_grad[0]:
             xd1 = get_data(ctx.to_save[1])
             grad0 = reverse_broadcast(gd0 * xd1, xd0_shape)
-        else:
-            grad0 = None
         if ctx.needs_input_grad[1]:
             xd0 = ctx.params['copy'] if ctx.to_save[0] is None else get_data(ctx.to_save[0])
             grad1 = reverse_broadcast(gd0 * xd0, xd1_shape)
-        else:
-            grad1 = None
         return grad0, grad1
 
 
@@ -96,17 +92,16 @@ class Div(Function):
         if params['inplace']:
             inplace_precheck(xt0)
             if xt1.requires_grad:
-                ctx.params = {'copy': xd0.copy()}
-            yd0 = xp.divide(xd0, xd1, out=xd0)
-            yd0._version += 1
+                params['copy'] = xd0.copy()
+            xp.divide(xd0, xd1, out=xd0)
             yt0 = xt0
-            yt0.requires_grad = requires_grad
-            yt0.grad_fn = ctx
+            inplace_update(yt0, requires_grad, ctx)
             ctx.save_for_backward(None, xt1)
         else:
             yt0 = tt.tensor(xp.divide(xd0, xd1), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx)
             ctx.save_for_backward(xt0, xt1)
-        ctx.params = {'shape':(xd0.shape, xd1.shape)}
+        params['shape'] = (xd0.shape, xd1.shape)
+        ctx.params = params
         return yt0
 
     @staticmethod
@@ -114,15 +109,12 @@ class Div(Function):
         gd0, = grad_outputs
         xd0_shape, xd1_shape = ctx.params['shape']
         xd1 = get_data(ctx.to_save[1])
+        grad0, grad1 = None, None
         if ctx.needs_input_grad[0]:
             grad0 = reverse_broadcast(gd0 / xd1, xd0_shape)
-        else:
-            grad0 = None
         if ctx.needs_input_grad[1]:
             xd0 = ctx.params['copy'] if ctx.to_save[0] is None else get_data(ctx.to_save[0])
             grad1 = reverse_broadcast(-gd0 * xd0 / (xd1 * xd1), xd1_shape)
-        else:
-            grad1 = None
         return grad0, grad1
 
 
@@ -135,6 +127,8 @@ divide = div
 
 
 def generate_grad_ufunc():
+    if os.path.exists(f'{Path(__file__).parent}/grad_ufunc.py'):
+        return
     with open(rf'{Path(__file__).parent}/grad_ufunc_config.yaml') as file:
         yml = yaml.load(file, Loader=yaml.FullLoader)
         c('from tortto import np, cp, cparray\nfrom .function import *\nfrom .helper import *')
@@ -189,9 +183,12 @@ def generate_grad_ufunc():
                         with indent(f"if params['inplace']:"):
                             c('inplace_precheck(xt0)')
                             if copy_xt0:
-                                c("ctx.params = {'copy': xd0.copy()}")
-                            c(f"yd0 = {forward_inplace.replace('...', 'xd0').replace('///', 'xd1')}")
-                            c("yd0._version += 1\nyt0 = xt0\nyt0.requires_grad = requires_grad\nyt0.grad_fn = ctx")
+                                with indent('if requires_grad:'):
+                                    c("params['copy'] = xd0.copy()")
+                            c(f"{forward_inplace.replace('...', 'xd0').replace('///', 'xd1')}")
+                            c("yt0 = xt0")
+                            c('inplace_update(yt0, requires_grad, ctx)')
+
                             if copy_xt0:
                                 c(f"ctx.save_for_backward({save_for_backward})")
                         with indent('else:'):
@@ -203,7 +200,9 @@ def generate_grad_ufunc():
                     if save_for_backward is not None and copy_xt0 is False:
                         c(f"ctx.save_for_backward({save_for_backward})")
                     if params:
-                        c(f"ctx.params = {{'{params}':({', '.join(f'xd{i}.{params}' for i in range(num_inputs))})}}")
+                        c(f"params['{params}'] = ({', '.join(f'xd{i}.{params}' for i in range(num_inputs))})")
+                    if copy_xt0 or params:
+                        c('ctx.params = params')
                     c(f"return {', '.join(f'yt{i}' for i in range(num_outputs))}")
                 newline()
                 with indent('@staticmethod\ndef backward(ctx, *grad_outputs):'):

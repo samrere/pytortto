@@ -68,23 +68,35 @@ if scipy_is_loaded:
 # math has prod since python 3.8, math.prod is 30 times faster
 prod = math.prod if hasattr(math, 'prod') else np.prod
 
+class Relu(Function):
+    @staticmethod
+    def forward(ctx, *inputs, **params):
+        xt0, = inputs
+        xd0 = xt0.data
+        inplace = params['inplace']
+        requires_grad = xt0.requires_grad
+        if inplace:
+            inplace_precheck(xt0)
+            xd0[xd0<0]=0
+            yt0=xt0
+            inplace_update(yt0, requires_grad, ctx)
+        else:
+            yt0 = tt.tensor(xd0*(xd0>0), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx)
+        ctx.save_for_backward(yt0)
+        ctx.params = params
+        return yt0
+    @staticmethod
+    def backward(ctx, *grad_outputs):
+        gd0, = grad_outputs
+        yd0, = ctx.saved_tensors
+        grad0 = gd0 * (yd0 > 0)
+        return grad0
 
-def relu(inpt: Tensor, inplace=False):
-    x = inpt.data
-    if inplace:
-        x *= x > 0
-        value = x
-    else:
-        value = x * (x > 0)
-    output = build_links(value, inpt.requires_grad, relu, inpt)
-    return output
+def relu(input, inplace=False):
+    return Relu.apply(input, inplace=inplace)
 
-
-@register_gradients(relu)
-def backward(tensor, grad, params):
-    inputs = tensor.parents
-    if inputs[0].requires_grad:
-        inputs[0].grad += grad * (inputs[0].data > 0)
+def relu_(input):
+    return Relu.apply(input, inplace=True)
 
 
 def leaky_relu(inpt: Tensor, negative_slope=0.01, inplace=False):

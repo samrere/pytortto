@@ -54,7 +54,8 @@ class Module:
                                       .format(key, input_param.shape, param.shape))
                     continue
                 try:
-                    param.copy_(input_param)
+                    with tt.no_grad():
+                        param.copy_(input_param)
                 except Exception as ex:
                     error_msgs.append('While copying the parameter named "{}", '
                                       'whose dimensions in the model are {} and '

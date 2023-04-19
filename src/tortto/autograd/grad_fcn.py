@@ -11,7 +11,7 @@ class Permute(Function): # keep input _version: True
         xd0 = xt0.data
         xp = cp if xd0.__class__ is cparray else np
         requires_grad = xt0.requires_grad
-        yt0 = tt.tensor(xp.transpose(xd0, params['dims']), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx, _version=xd0._version)
+        yt0 = tt.tensor(xp.transpose(xd0, params['dims']), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx)
         ctx.params = params
         return yt0
     @staticmethod
@@ -44,7 +44,7 @@ class Transpose(Function): # keep input _version: True
         xp = cp if xd0.__class__ is cparray else np
         requires_grad = xt0.requires_grad
         dim0, dim1 = params['dim0'], params['dim1']
-        yt0 = tt.tensor(xp.swapaxes(xd0, dim0,dim1), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx, _version=xd0._version)
+        yt0 = tt.tensor(xp.swapaxes(xd0, dim0,dim1), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx)
         ctx.params = params
         return yt0
     @staticmethod
@@ -130,6 +130,7 @@ class Sum(Function):
             for i in dim:
                 strides[i] = 0  # repeat along axis in x.shape
             grad0=xp.lib.stride_tricks.as_strided(gd0, shape=xd0_shape, strides=strides)
+        grad0 = cparray(grad0) if xp is cp else nparray(grad0)
         return grad0
 def sum(input, dim=None, keepdim=False):
     return Sum.apply(input, dim=dim, keepdim=keepdim)
@@ -168,6 +169,7 @@ class Mean(Function):
                 N *= xd0.shape[i]
                 strides[i] = 0  # repeat along axis in x.shape
             grad0=xp.lib.stride_tricks.as_strided(xp.divide(gd0, N, dtype=gd0.dtype), shape=xd0.shape, strides=strides)
+        grad0 = cparray(grad0) if xp is cp else nparray(grad0)
         return grad0
 def mean(input, dim=None, keepdim=False):
     return Mean.apply(input, dim=dim, keepdim=keepdim)
@@ -248,7 +250,7 @@ class Slice(Function): # keep input _version: True
         xt0, = inputs
         xd0 = xt0.data
         requires_grad = xt0.requires_grad
-        yt0 = tt.tensor(xd0[params['key']], requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn = ctx, _version=xd0._version)
+        yt0 = tt.tensor(xd0[params['key']], requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx, _version=xd0._version)
         params['shape']=xd0.shape
         ctx.params = params
         return yt0
@@ -419,6 +421,7 @@ class Repeat(Function): # keep input _version: False
                          tuple(xd0_shape[i]*yt0_strides[i-xd0_ndim] for i in range(xd0_ndim))+ \
                          yt0_strides[-xd0_ndim:]
         grad0=xp.lib.stride_tricks.as_strided(gd0, shape=target_shape, strides=target_strides).sum(leading_dims)
+        grad0 = cparray(grad0) if xp is cp else nparray(grad0)
         return grad0
 
 
@@ -449,9 +452,9 @@ class Expand(Function): # keep input _version: True
                         raise RuntimeError(f"The expanded size of the tensor ({sizes[i]}) must match the existing size "
                                            f"({xd0.shape[i]}) at non-singleton dimension {i+len(sizes)}.  "
                                            f"Target sizes: {sizes}.  Tensor sizes: {xd0.shape}")
-        value = xp.lib.stride_tricks.as_strided(xd0, shape=sizes, strides=strides)
-        yt0 = tt.tensor(value, requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx)
-        yt0.data._version = xd0._version
+        value = xp.lib.stride_tricks.as_strided(xd0, shape=sizes, strides=strides) # a numpy/cupy array
+        yt0 = tt.tensor(value, requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx) # convert to nparray/cparray
+        yt0._version = xd0._version # keep version
         ctx.params = {'xd0_singleton_dims':xd0_singleton_dims, 'leading_dims':leading_dims}
         return yt0
     @staticmethod
@@ -523,39 +526,46 @@ class MaskedFill(Function): # keep input _version: False (except in-place)
                                f"but got tensor with {xt1.ndim} dimension(s).")
         mask = params['mask']
         if mask.dtype.type is not np.bool_:
-            print(mask.dtype.type)
             raise RuntimeError(f"dtype of mask must be bool. "
                                f"Pass dtype=bool when constructing mask")
 
         requires_grad = xt0.requires_grad | xt1.requires_grad
+
+        flag=False
+        if xd0.__class__ is cparray and xd1.__class__ is not cparray: # xd1 is a scaler, no need to convert it to cparray
+            flag=True
+        elif xd0.__class__ is not cparray and xd1.__class__ is cparray:
+            raise RuntimeError(f"masked_fill: Expected inputs to be on same device")
+
         key=(slice(None),)*(xd0.ndim-mask.ndim)+(mask.data,)
         if params['inplace']:
             inplace_precheck(xt0)
-            xd0[key]=xt1.data
-            xd0._version+=1
+            xd0[key]=xd1
             yt0 = xt0
-            yt0.requires_grad=requires_grad
-            yt0.grad_fn=ctx
+            inplace_update(yt0, requires_grad, ctx)
         else:
             xd0=xd0.copy()
             xd0[key]=xt1.data
             yt0=tt.tensor(xd0, requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx)
+        params['flag']=flag
         ctx.params=params
         return yt0
     @staticmethod
     def backward(ctx, *grad_outputs):
         gd0, = grad_outputs
         mask = ctx.params['mask']
+        flag = ctx.params['flag']
         leading = (slice(None),) * (gd0.ndim - mask.ndim)
-        xp = cp if gd0.__class__ is cparray else np
         grad0, grad1 = None, None
-        if ctx.needs_input_grad[0]: # grad for input
-            not_key = leading + (~mask.data,)
-            grad0 = xp.zeros_like(gd0)
-            grad0[not_key] = gd0[not_key]
-        if ctx.needs_input_grad[1]: # grad for value
+        if ctx.needs_input_grad[1]: # grad for value. Do this first because gd0 will be changed inplace next
             key = leading + (mask.data,)
             grad1=gd0[key].sum()
+            if flag:
+                grad1 = nparray(grad1.get())
+        if ctx.needs_input_grad[0]: # grad for input
+            key = leading + (mask.data,)
+            grad0 = gd0
+            grad0[key] = 0
         return grad0, grad1
 
 def masked_fill(input, mask, value):
@@ -567,3 +577,90 @@ def masked_fill_(input, mask, value):
         value=tt.tensor(value, copy=False)
     return MaskedFill.apply(input, value, mask=mask, inplace=True)
 
+class CopySlices(Function): # keep input _version: True (it's inplace)
+    @staticmethod
+    def forward(ctx, *inputs, **params):
+        xt0, xt1 = inputs
+        xd0, xd1 = xt0.data, xt1.data
+        key = params['key']
+        requires_grad = xt0.requires_grad | xt1.requires_grad
+
+        # convert xd1 to same array type as xd0
+        flag = None
+        if xd0.__class__ is cparray and xd1.__class__ is not cparray:
+            xd1 = cp.array(xd1)
+            flag = True
+        elif xd0.__class__ is not cparray and xd1.__class__ is cparray:
+            xd1 = xd1.get()
+            flag = False
+
+        inplace_precheck(xt0)
+        xd0[key] = xd1
+        yt0 = xt0
+        inplace_update(yt0, requires_grad, ctx)
+
+        params['shapes']=(xd0.shape, xd1.shape)
+        params['flag']=flag
+        ctx.params = params
+        return yt0
+
+    @staticmethod
+    def backward(ctx, *grad_outputs):
+        gd0, = grad_outputs
+        xd0_shape, xd1_shape = ctx.params['shapes']
+        key = ctx.params['key']
+        flag = ctx.params['flag']
+        grad0, grad1 = None, None
+
+        if ctx.needs_input_grad[1]: # grad for value. Do this first because gd0 will be changed inplace next
+            grad1 = reverse_broadcast(gd0[key], xd1_shape)
+            if flag is True:
+                grad1 = nparray(grad1.get())
+            elif flag is False:
+                grad1 = cparray(grad1)
+
+        if ctx.needs_input_grad[0]:  # grad for input
+            grad0 = gd0
+            grad0[key] = 0
+        return grad0, grad1
+
+class Copy(Function): # keep input _version: True (it's inplace)
+    @staticmethod
+    def forward(ctx, *inputs, **params):
+        xt0, xt1 = inputs
+        xd0, xd1 = xt0.data, xt1.data
+        requires_grad = xt0.requires_grad | xt1.requires_grad
+
+        # convert xd1 to same array type as xd0
+        flag = None
+        if xd0.__class__ is cparray and xd1.__class__ is not cparray:
+            xd1 = cp.array(xd1)
+            flag = True
+        elif xd0.__class__ is not cparray and xd1.__class__ is cparray:
+            xd1 = xd1.get()
+            flag = False
+
+        inplace_precheck(xt0)
+        xd0[...] = xd1
+        yt0 = xt0
+        inplace_update(yt0, requires_grad, ctx)
+
+        params['flag'] = flag
+        ctx.params = params
+        return yt0
+
+    @staticmethod
+    def backward(ctx, *grad_outputs):
+        gd0, = grad_outputs
+        grad0, grad1 = None, None
+        flag = ctx.params['flag']
+        if ctx.needs_input_grad[1]: # grad for value.
+            grad1 = gd0
+            if flag is True:
+                grad1 = nparray(grad1.get())
+            elif flag is False:
+                grad1 = cparray(grad1)
+        if ctx.needs_input_grad[0]: # grad for input, zero
+            grad0 = gd0
+            grad0[...] = 0
+        return grad0, grad1 # no grad for input

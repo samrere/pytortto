@@ -45,7 +45,6 @@ class AccumulateGrad(BackwardFunction):
             self.variable.grad = tt._int_zero
         self.variable.grad+=self.grad[0]
 
-
 class Function(FunctionBase):
     def __init__(self, *args, **kwargs):
         cls = self.__class__

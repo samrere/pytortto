@@ -19,11 +19,12 @@ default_dtype = {int64, float32, complex64, np.bool_}
 
 class Tensor:
     def __init__(self, data, requires_grad=False, dtype=float32, copy=True, **kwargs):
-        if data.__class__ is cparray or data.__class__ is cp.ndarray:
-            data = cparray(data, dtype=dtype, copy=copy)
+        if data.__class__ is cp.ndarray:
+            self.data = cparray(data, dtype=dtype, copy=copy)
+        elif data.__class__ is nparray or data.__class__ is cparray:
+            self.data = data
         else:
-            data = nparray(data, dtype=dtype, copy=copy)
-        self.data = data
+            self.data = nparray(data, dtype=dtype, copy=copy)
         self.grad = None
         self.grad_fn = kwargs.get('grad_fn')
         self.requires_grad = requires_grad
@@ -35,7 +36,7 @@ class Tensor:
     ################
     @property
     def _version(self):
-        return self.data._version
+        return self.data._version[0]
     @property
     def requires_grad(self):
         return self._requires_grad
@@ -287,13 +288,11 @@ class Tensor:
     def __getitem__(self, key):
         return Slice.apply(self, key=key)
 
-    # @inplace_precheck
+
     def __setitem__(self, key, value):
-        print(key)
-        ...
-
-
-
+        if value.__class__ is not tt.Tensor:
+            value = tt.tensor(value, copy=False)
+        return CopySlices.apply(self, value, key=key)
 
 
 
@@ -314,7 +313,6 @@ class Tensor:
     def numel(self):
         # Returns the total number of elements in the input tensor.
         return self.data.size
-
 
 
     def item(self):
@@ -341,7 +339,7 @@ class Tensor:
                 f"can't convert {self.device} device type tensor to numpy. Use Tensor.cpu() to copy the tensor to host memory first.")
         if self.requires_grad:
             raise RuntimeError("Can't call numpy() on Tensor that requires grad. Use tensor.detach().numpy() instead.")
-        return data
+        return data.type(np.ndarray)
 
     def contiguous(self):
         """
@@ -354,28 +352,15 @@ class Tensor:
     def is_contiguous(self):
         return self.data.flags['C_CONTIGUOUS']
 
-    def copy_(self, array):
+    def copy_(self, array): # check this later!
         """
         1. the input can be tensor or array instead of tensor only as in pytorch
         2. used in module _load_from_state_dict. copy numpy array from checkpoint to tensor
            array from checkpoint is always numpy array.
         """
-        if isinstance(array, Tensor):
-            array = array.data
-        if self.shape != array.shape:
-            raise RuntimeError(f'The size of tensor a {self.shape} must match the size of tensor b {array.shape}')
-
-        array = array.copy()  # copy array data
-        from_class = array.__class__
-        to_class = self.data.__class__
-        if to_class is np.ndarray:
-            if from_class is not np.ndarray:
-                array = array.get()
-        else:
-            if from_class is np.ndarray:
-                array = cp.array(array)
-        self.data = array
-        return self
+        if array.__class__ is not Tensor:
+            array=tt.tensor(array, copy=False)
+        return Copy.apply(self, array)
 
 
 
@@ -487,8 +472,11 @@ class Tensor:
         if not self.requires_grad and not self.grad_fn:
             raise RuntimeError('element 0 of tensors does not require grad and does not have a grad_fn')
         if gradient is None:
-            xp = cp if self.data.__class__ is cparray else np
-            gradient = xp.expand_dims(xp.array(1, dtype=self.dtype), axis=tuple(range(self.ndim)))
+            if self.data.__class__ is cparray:
+                gradient = cp.expand_dims(cparray(1, dtype=self.dtype), axis=tuple(range(self.ndim)))
+            else:
+                gradient = np.expand_dims(nparray(1, dtype=self.dtype), axis=tuple(range(self.ndim)))
+
         elif isinstance(gradient, Tensor):
             gradient = gradient.data
         if self.data.shape != gradient.shape:
