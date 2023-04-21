@@ -51,8 +51,7 @@ special = """class Mul(Function):
             if xt1.requires_grad:
                 params['copy'] = xd0.copy()
             xp.multiply(xd0, xd1, out=xd0)
-            yt0 = xt0
-            inplace_update(yt0, requires_grad, ctx)
+            yt0 = inplace_update(xt0, requires_grad, ctx)
             ctx.save_for_backward(None, xt1)
         else:
             yt0 = tt.tensor(xp.multiply(xd0, xd1), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx)
@@ -94,8 +93,7 @@ class Div(Function):
             if xt1.requires_grad:
                 params['copy'] = xd0.copy()
             xp.divide(xd0, xd1, out=xd0)
-            yt0 = xt0
-            inplace_update(yt0, requires_grad, ctx)
+            yt0 = inplace_update(xt0, requires_grad, ctx)
             ctx.save_for_backward(None, xt1)
         else:
             yt0 = tt.tensor(xp.divide(xd0, xd1), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx)
@@ -186,8 +184,7 @@ def generate_grad_ufunc():
                                 with indent('if requires_grad:'):
                                     c("params['copy'] = xd0.copy()")
                             c(f"{forward_inplace.replace('...', 'xd0').replace('///', 'xd1')}")
-                            c("yt0 = xt0")
-                            c('inplace_update(yt0, requires_grad, ctx)')
+                            c('yt0 = inplace_update(xt0, requires_grad, ctx)')
 
                             if copy_xt0:
                                 c(f"ctx.save_for_backward({save_for_backward})")

@@ -77,9 +77,8 @@ class Relu(Function):
         requires_grad = xt0.requires_grad
         if inplace:
             inplace_precheck(xt0)
-            xd0*=xd0>0
-            yt0=xt0
-            inplace_update(yt0, requires_grad, ctx)
+            xd0 *= xd0>0
+            yt0 = inplace_update(xt0, requires_grad, ctx)
         else:
             yt0 = tt.tensor(xd0*(xd0>0), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx)
         ctx.save_for_backward(yt0)
@@ -110,24 +109,23 @@ class LeakyRelu(Function):
         if inplace:
             inplace_precheck(xt0)
             xp.maximum(xd0 * negative_slope, xd0, out=xd0)
-            yt0 = xt0
-            inplace_update(yt0, requires_grad, ctx)
+            yt0=inplace_update(xt0, requires_grad, ctx)
         else:
             yt0 = tt.tensor(xp.maximum(xd0 * negative_slope, xd0), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx)
         ctx.save_for_backward(xt0)
         ctx.params = params
         return yt0
-
-
-@register_gradients(leaky_relu)
-def backward(tensor, grad, params):
-    xp = cp if grad.__class__ is cparray else np
-    inputs = tensor.parents
-    negative_slope = params['negative_slope']
-    if inputs[0].requires_grad:
-        value = xp.ones_like(grad)
-        value[inputs[0].data < 0] = negative_slope
-        inputs[0].grad += grad * value
+    @staticmethod
+    def backward(ctx, *grad_outputs):
+        gd0, = grad_outputs
+        xd0, = ctx.saved_tensors
+        negative_slope = ctx.params['negative_slope']
+        gd0[xd0<0] *= negative_slope
+        return gd0
+def leaky_relu(input, negative_slope=0.01, inplace=False):
+    return LeakyRelu.apply(input, negative_slope=negative_slope, inplace=inplace)
+def leaky_relu_(input, negative_slope=0.01):
+    return LeakyRelu.apply(input, negative_slope=negative_slope, inplace=True)
 
 
 def gelu(inpt):

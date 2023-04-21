@@ -13,6 +13,7 @@ def inplace_update(tensor, requires_grad, grad_fn):
     tensor.requires_grad = requires_grad
     if requires_grad:
         tensor.grad_fn = grad_fn
+    return tensor
 
 def get_data(pair):
     if pair is None:

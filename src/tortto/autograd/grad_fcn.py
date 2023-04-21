@@ -541,8 +541,7 @@ class MaskedFill(Function): # keep input _version: False (except in-place)
         if params['inplace']:
             inplace_precheck(xt0)
             xd0[key]=xd1
-            yt0 = xt0
-            inplace_update(yt0, requires_grad, ctx)
+            yt0 = inplace_update(xt0, requires_grad, ctx)
         else:
             xd0=xd0.copy()
             xd0[key]=xt1.data

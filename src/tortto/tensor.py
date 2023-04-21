@@ -1,5 +1,5 @@
 import tortto
-from tortto import np, cp, cparray, nparray,_int_zero
+from tortto import np, cp, cparray, nparray, cupy_is_loaded
 from .VariableFunctions import *
 from .autograd.grad_fcn import *
 from .autograd.grad_ufunc import *
@@ -19,10 +19,8 @@ default_dtype = {int64, float32, complex64, np.bool_}
 
 class Tensor:
     def __init__(self, data, requires_grad=False, dtype=float32, copy=True, **kwargs):
-        if data.__class__ is cp.ndarray:
+        if cupy_is_loaded and (data.__class__ is cparray or data.__class__ is cp.ndarray):
             self.data = cparray(data, dtype=dtype, copy=copy)
-        elif data.__class__ is nparray or data.__class__ is cparray:
-            self.data = data
         else:
             self.data = nparray(data, dtype=dtype, copy=copy)
         self.grad = None

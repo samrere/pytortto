@@ -35,8 +35,7 @@ class Sqrt(Function):
         if params['inplace']:
             inplace_precheck(xt0)
             xp.sqrt(xd0, out=xd0)
-            yt0 = xt0
-            inplace_update(yt0, requires_grad, ctx)
+            yt0 = inplace_update(xt0, requires_grad, ctx)
         else:
             yt0 = tt.tensor(xp.sqrt(xd0), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx)
         ctx.save_for_backward(yt0)
@@ -69,8 +68,7 @@ class Exp(Function):
         if params['inplace']:
             inplace_precheck(xt0)
             xp.exp(xd0, out=xd0)
-            yt0 = xt0
-            inplace_update(yt0, requires_grad, ctx)
+            yt0 = inplace_update(xt0, requires_grad, ctx)
         else:
             yt0 = tt.tensor(xp.exp(xd0), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx)
         ctx.save_for_backward(yt0)
@@ -102,8 +100,7 @@ class Tan(Function):
         if params['inplace']:
             inplace_precheck(xt0)
             xp.tan(xd0, out=xd0)
-            yt0 = xt0
-            inplace_update(yt0, requires_grad, ctx)
+            yt0 = inplace_update(xt0, requires_grad, ctx)
         else:
             yt0 = tt.tensor(xp.tan(xd0), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx)
         ctx.save_for_backward(yt0)
@@ -136,8 +133,7 @@ class Tanh(Function):
         if params['inplace']:
             inplace_precheck(xt0)
             xp.tanh(xd0, out=xd0)
-            yt0 = xt0
-            inplace_update(yt0, requires_grad, ctx)
+            yt0 = inplace_update(xt0, requires_grad, ctx)
         else:
             yt0 = tt.tensor(xp.tanh(xd0), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx)
         ctx.save_for_backward(yt0)
@@ -170,8 +166,7 @@ class Sigmoid(Function):
         if params['inplace']:
             inplace_precheck(xt0)
             xp.exp(-xp.logaddexp(0, -xd0, out=xd0), out=xd0)
-            yt0 = xt0
-            inplace_update(yt0, requires_grad, ctx)
+            yt0 = inplace_update(xt0, requires_grad, ctx)
         else:
             yt0 = tt.tensor(xp.exp(-xp.logaddexp(0, -xd0)), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx)
         ctx.save_for_backward(yt0)
@@ -226,8 +221,7 @@ class Neg(Function):
         if params['inplace']:
             inplace_precheck(xt0)
             xp.neg(xd0, out=xd0)
-            yt0 = xt0
-            inplace_update(yt0, requires_grad, ctx)
+            yt0 = inplace_update(xt0, requires_grad, ctx)
         else:
             yt0 = tt.tensor(xp.neg(xd0), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx)
         return yt0
@@ -263,8 +257,7 @@ class Add(Function):
         if params['inplace']:
             inplace_precheck(xt0)
             xp.add(xd0, xd1, out=xd0)
-            yt0 = xt0
-            inplace_update(yt0, requires_grad, ctx)
+            yt0 = inplace_update(xt0, requires_grad, ctx)
         else:
             yt0 = tt.tensor(xp.add(xd0, xd1), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx)
         params['shape'] = (xd0.shape, xd1.shape)
@@ -294,8 +287,7 @@ class Sub(Function):
         if params['inplace']:
             inplace_precheck(xt0)
             xp.subtract(xd0, xd1, out=xd0)
-            yt0 = xt0
-            inplace_update(yt0, requires_grad, ctx)
+            yt0 = inplace_update(xt0, requires_grad, ctx)
         else:
             yt0 = tt.tensor(xp.subtract(xd0, xd1), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx)
         params['shape'] = (xd0.shape, xd1.shape)
@@ -330,8 +322,7 @@ class Sin(Function):
             if requires_grad:
                 params['copy'] = xd0.copy()
             xp.sin(xd0, out=xd0)
-            yt0 = xt0
-            inplace_update(yt0, requires_grad, ctx)
+            yt0 = inplace_update(xt0, requires_grad, ctx)
             ctx.save_for_backward(None)
         else:
             yt0 = tt.tensor(xp.sin(xd0), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx)
@@ -370,8 +361,7 @@ class Cos(Function):
             if requires_grad:
                 params['copy'] = xd0.copy()
             xp.cos(xd0, out=xd0)
-            yt0 = xt0
-            inplace_update(yt0, requires_grad, ctx)
+            yt0 = inplace_update(xt0, requires_grad, ctx)
             ctx.save_for_backward(None)
         else:
             yt0 = tt.tensor(xp.cos(xd0), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx)
@@ -410,8 +400,7 @@ class Log(Function):
             if requires_grad:
                 params['copy'] = xd0.copy()
             xp.log(xd0, out=xd0)
-            yt0 = xt0
-            inplace_update(yt0, requires_grad, ctx)
+            yt0 = inplace_update(xt0, requires_grad, ctx)
             ctx.save_for_backward(None)
         else:
             yt0 = tt.tensor(xp.log(xd0), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx)
@@ -449,8 +438,7 @@ class Abs(Function):
             if requires_grad:
                 params['copy'] = xd0.copy()
             xp.abs(xd0, out=xd0)
-            yt0 = xt0
-            inplace_update(yt0, requires_grad, ctx)
+            yt0 = inplace_update(xt0, requires_grad, ctx)
             ctx.save_for_backward(None)
         else:
             yt0 = tt.tensor(xp.abs(xd0), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx)
@@ -492,8 +480,7 @@ class Pow(Function):
             if requires_grad:
                 params['copy'] = xd0.copy()
             xp.power(xd0, xd1, out=xd0)
-            yt0 = xt0
-            inplace_update(yt0, requires_grad, ctx)
+            yt0 = inplace_update(xt0, requires_grad, ctx)
             ctx.save_for_backward(None, xt1, yt0)
         else:
             yt0 = tt.tensor(xp.power(xd0, xd1), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx)
@@ -531,8 +518,7 @@ class Mul(Function):
             if xt1.requires_grad:
                 params['copy'] = xd0.copy()
             xp.multiply(xd0, xd1, out=xd0)
-            yt0 = xt0
-            inplace_update(yt0, requires_grad, ctx)
+            yt0 = inplace_update(xt0, requires_grad, ctx)
             ctx.save_for_backward(None, xt1)
         else:
             yt0 = tt.tensor(xp.multiply(xd0, xd1), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx)
@@ -574,8 +560,7 @@ class Div(Function):
             if xt1.requires_grad:
                 params['copy'] = xd0.copy()
             xp.divide(xd0, xd1, out=xd0)
-            yt0 = xt0
-            inplace_update(yt0, requires_grad, ctx)
+            yt0 = inplace_update(xt0, requires_grad, ctx)
             ctx.save_for_backward(None, xt1)
         else:
             yt0 = tt.tensor(xp.divide(xd0, xd1), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx)
@@ -603,3 +588,4 @@ def div(input, other):
 
 
 divide = div
+

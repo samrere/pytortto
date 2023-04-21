@@ -4,6 +4,8 @@ import numpy as np
 np.set_printoptions(precision=4)
 class nparray(np.ndarray):
     def __new__(cls, input_array, *args, **kwargs):
+        if input_array.__class__ is cls:
+            return input_array
         obj = np.array(input_array, *args, **kwargs).view(cls)
         obj._version = [0]
         return obj
@@ -33,6 +35,8 @@ if cupy_is_loaded:
 
     class cparray(cp.ndarray):
         def __new__(cls, input_array, *args, **kwargs):
+            if input_array.__class__ is cls:
+                return input_array
             obj = cp.array(input_array, *args, **kwargs).view(cls)
             obj._version = [0]
             return obj
