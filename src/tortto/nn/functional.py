@@ -77,7 +77,7 @@ class Relu(Function):
         requires_grad = xt0.requires_grad
         if inplace:
             inplace_precheck(xt0)
-            xd0[xd0<0]=0
+            xd0*=xd0>0
             yt0=xt0
             inplace_update(yt0, requires_grad, ctx)
         else:
@@ -98,13 +98,25 @@ def relu(input, inplace=False):
 def relu_(input):
     return Relu.apply(input, inplace=True)
 
-
-def leaky_relu(inpt: Tensor, negative_slope=0.01, inplace=False):
-    x = inpt.data
-    xp = cp if x.__class__ is cparray else np
-    value = xp.maximum(x * negative_slope, x, out=x if inplace else None)
-    output = build_links(value, inpt.requires_grad, leaky_relu, inpt, negative_slope=negative_slope)
-    return output
+class LeakyRelu(Function):
+    @staticmethod
+    def forward(ctx, *inputs, **params):
+        xt0, = inputs
+        xd0 = xt0.data
+        inplace = params['inplace']
+        negative_slope=params['negative_slope']
+        xp=cp if xd0.__class__ is cparray else np
+        requires_grad = xt0.requires_grad
+        if inplace:
+            inplace_precheck(xt0)
+            xp.maximum(xd0 * negative_slope, xd0, out=xd0)
+            yt0 = xt0
+            inplace_update(yt0, requires_grad, ctx)
+        else:
+            yt0 = tt.tensor(xp.maximum(xd0 * negative_slope, xd0), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx)
+        ctx.save_for_backward(xt0)
+        ctx.params = params
+        return yt0
 
 
 @register_gradients(leaky_relu)
