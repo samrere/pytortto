@@ -46,13 +46,11 @@ if cupy_is_loaded:
     import cupyx.scipy.sparse as cp_sparse
 
 #
-HALF = {float16: float16(.5), float32: float32(.5), float64: float64(.5)}
-ONE = {float16: float16(1), float32: float32(1), float64: float64(1)}
-TWO = {float16: float16(2), float32: float32(2), float64: float64(2)}
+SQRT_PI={float16: float16(math.sqrt(math.pi)), float32: float32(math.sqrt(math.pi)), float64: float64(math.sqrt(math.pi))}
 SQRT_2 = {float16: float16(math.sqrt(2)), float32: float32(math.sqrt(2)), float64: float64(math.sqrt(2))}
 SQRT_2_over_PI = {float16: float16(math.sqrt(2 / math.pi)), float32: float32(math.sqrt(2 / math.pi)),
                   float64: float64(math.sqrt(2 / math.pi))}
-CONST = {float16: float16(.08943), float32: float32(.08943), float64: float64(.08943)}
+CONST = {float16: float16(.044715), float32: float32(.044715), float64: float64(.044715)}
 _floating_point = {float16, float32, float64}
 
 # default functions using numpy
@@ -62,7 +60,7 @@ np_irfft2 = np.fft.irfft2
 # if scipy is present, replace default numpy functions to scipy
 if scipy_is_loaded:
     from scipy.fft import rfft2 as np_rfft2, irfft2 as np_irfft2
-    from scipy.special import erf as np_erf
+    import scipy.special as scipy_special
     import scipy.sparse as sci_sparse
 
 # math has prod since python 3.8, math.prod is 30 times faster
@@ -127,33 +125,49 @@ def leaky_relu(input, negative_slope=0.01, inplace=False):
 def leaky_relu_(input, negative_slope=0.01):
     return LeakyRelu.apply(input, negative_slope=negative_slope, inplace=True)
 
+class Gelu(Function):
+    @staticmethod
+    def forward(ctx, *inputs, **params):
+        xt0, = inputs
+        xd0 = xt0.data
+        dtype=xd0.dtype.type
+        approximate = params['approximate']
+        requires_grad = xt0.requires_grad
+        xp = cp if xd0.__class__ is cparray else np
+        if approximate == 'none':
+            if not scipy_is_loaded and xp is np: # if scipy is not installed, and x is in cpu
+                raise RuntimeError(f"SciPy is not installed, can't use approximate='none', set it to 'tanh' instead.")
+            erf_s = cp_special.erf(xd0/SQRT_2[dtype]) if xd0.__class__ is cparray else scipy_special.erf(xd0/SQRT_2[dtype])
+        elif approximate == 'tanh':
+            erf_s = xp.tanh(SQRT_2_over_PI[dtype] * (xd0 + dtype(.044715) * xd0 * xd0 * xd0))
+        else:
+            raise RuntimeError(f"approximate argument must be either none or tanh.")
+        yt0 = tt.tensor(dtype(0.5) * xd0 * (erf_s + dtype(1)), requires_grad=requires_grad, copy=False, _output_idx=0,
+                grad_fn=ctx)
+        ctx.save_for_backward(xt0)
+        ctx.params = params
+        return yt0
+    @staticmethod
+    def backward(ctx, *grad_outputs):
+        gd0, = grad_outputs
+        xd0, = ctx.saved_tensors
+        approximate = ctx.params['approximate']
+        xp = cp if gd0.__class__ is cparray else np
+        dtype = xd0.dtype.type
+        half = dtype(0.5)
+        s = xd0 / SQRT_2[dtype]
+        if approximate == 'none':
+            erf_s = cp_special.erf(s) if xd0.__class__ is cparray else scipy_special.erf(s)
+        else:
+            erf_s = xp.tanh(SQRT_2_over_PI[dtype] * (xd0 + dtype(.044715) * xd0 * xd0 * xd0))
+        erf_p = dtype(2)/SQRT_PI[dtype] * xp.exp(-(s * s))
+        grad0 = gd0 * (half + half * erf_s + ((half * xd0 * erf_p) / SQRT_2[dtype]))
+        return grad0
 
-def gelu(inpt):
-    x = inpt.data
-    if x.dtype.type not in _floating_point:
-        raise RuntimeError(f'gelu not implemented for {x.dtype.type.__name__}')
-    s = x / SQRT_2[x.dtype.type]
-    # select erf
-    erf = cp_special.erf if x.__class__ is cparray else np_erf
-    erf_s = erf(s)
-    value = HALF[x.dtype.type] * x * (erf_s + ONE[x.dtype.type])
-    output = build_links(value, inpt.requires_grad, gelu, inpt, s=s, erf_s=erf_s)
-    return output
+def gelu(input, approximate='none'):
+    return Gelu.apply(input, approximate=approximate)
 
-
-@register_gradients(gelu)
-def backward(tensor, grad, params):
-    xp = cp if grad.__class__ is cparray else np
-    inputs = tensor.parents
-    x = inputs[0].data
-    s = params['s']
-    erf_s = params['erf_s']
-    if inputs[0].requires_grad:
-        pdf_s = SQRT_2_over_PI[x.dtype.type] * xp.exp(-(s * s))
-        half = HALF[x.dtype.type]
-        inputs[0].grad += grad * (half + half * erf_s + ((half * x * pdf_s) / SQRT_2[x.dtype.type]))
-
-
+#####################################################################################
 def mse_loss(inpt: Tensor, target: Tensor, reduction='mean'):
     if inpt.shape != target.shape:
         warnings.warn("Using a target size ({}) that is different to the input size ({}). "

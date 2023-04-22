@@ -21,7 +21,7 @@ class nparray(np.ndarray):
 from importlib.util import find_spec
 cparray = None
 cupy_is_loaded = bool(find_spec('cupy'))
-cp = np  # cupy defaults to numpy
+cp = None
 if cupy_is_loaded:
     # os.environ['CUPY_ACCELERATORS'] = 'cub'
     import cupy as cp

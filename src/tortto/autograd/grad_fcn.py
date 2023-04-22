@@ -130,7 +130,7 @@ class Sum(Function):
             for i in dim:
                 strides[i] = 0  # repeat along axis in x.shape
             grad0=xp.lib.stride_tricks.as_strided(gd0, shape=xd0_shape, strides=strides)
-        grad0 = cparray(grad0) if xp is cp else nparray(grad0)
+        grad0 = cparray(grad0) if gd0.__class__ is cparray else nparray(grad0)
         return grad0
 def sum(input, dim=None, keepdim=False):
     return Sum.apply(input, dim=dim, keepdim=keepdim)
@@ -169,7 +169,7 @@ class Mean(Function):
                 N *= xd0.shape[i]
                 strides[i] = 0  # repeat along axis in x.shape
             grad0=xp.lib.stride_tricks.as_strided(xp.divide(gd0, N, dtype=gd0.dtype), shape=xd0.shape, strides=strides)
-        grad0 = cparray(grad0) if xp is cp else nparray(grad0)
+        grad0 = cparray(grad0) if gd0.__class__ is cparray else nparray(grad0)
         return grad0
 def mean(input, dim=None, keepdim=False):
     return Mean.apply(input, dim=dim, keepdim=keepdim)
@@ -421,7 +421,7 @@ class Repeat(Function): # keep input _version: False
                          tuple(xd0_shape[i]*yt0_strides[i-xd0_ndim] for i in range(xd0_ndim))+ \
                          yt0_strides[-xd0_ndim:]
         grad0=xp.lib.stride_tricks.as_strided(gd0, shape=target_shape, strides=target_strides).sum(leading_dims)
-        grad0 = cparray(grad0) if xp is cp else nparray(grad0)
+        grad0 = cparray(grad0) if gd0.__class__ is cparray else nparray(grad0)
         return grad0
 
 

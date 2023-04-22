@@ -37,13 +37,22 @@ class BackwardFunction(FunctionBase): # metaclass for all grad_fn
         if len(out)!=len(self.needs_input_grad):
             raise RuntimeError(f'function {self.__class__.__name__} returned an incorrect number of gradients'
                                f' (expected {len(self.needs_input_grad)}, got {len(out)})')
+        ## backward assertion, commented out
+        for o in out:
+            assert o.__class__ in {tt.cparray, tt.nparray}, f"backward output of {self.__class__.__name__} " \
+                                                            f"is {o.__class__}, not xparray"
+            for g in self.grad:
+                assert o.dtype.type is g.dtype.type, f"backward dtype error at {self.__class__.__name__}, " \
+                                                     f"input grad is {g.dtype.type.__name__} " \
+                                                     f"whereas output grad is {o.dtype.type.__name__}"
         return out
 
 class AccumulateGrad(BackwardFunction):
     def apply(self, *args):
         if self.variable.grad is None:
-            self.variable.grad = tt._int_zero
-        self.variable.grad+=self.grad[0]
+            self.variable.grad = self.grad[0]
+        else:
+            self.variable.grad+=self.grad[0]
 
 class Function(FunctionBase):
     def __init__(self, *args, **kwargs):
@@ -98,6 +107,16 @@ class Function(FunctionBase):
         if results.__class__ is tt.Tensor:
             is_tensor=True
             results = (results,)
+
+        ## forward assertion, commented out
+        for r in results:
+            assert r.data.__class__ in {tt.nparray, tt.cparray}, f'forward output of {cls.__name__} is ' \
+                                                                 f'{r.data.__class__}, not xparray'
+            for i in inputs:
+                assert r.data.dtype.type is i.data.dtype.type, f"forward dtype error at {cls.__name__}, " \
+                                                               f"input is {i.data.dtype.type.__name__} whereas " \
+                                                               f"output is {r.data.dtype.type.__name__}"
+
 
         grad_fn.grad = [tt._int_zero] * len(results)
 
