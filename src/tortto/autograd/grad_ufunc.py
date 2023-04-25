@@ -1,4 +1,4 @@
-from tortto import np, cp, cparray
+from tortto import np, cp, cparray, zero, one
 from .function import *
 from .helper import *
 
@@ -165,10 +165,10 @@ class Sigmoid(Function):
         requires_grad = xt0.requires_grad
         if params['inplace']:
             inplace_precheck(xt0)
-            xp.exp(-xp.logaddexp(0, -xd0, out=xd0), out=xd0)
+            xp.exp(-xp.logaddexp(zero, -xd0, out=xd0), out=xd0)
             yt0 = inplace_update(xt0, requires_grad, ctx)
         else:
-            yt0 = tt.tensor(xp.exp(-xp.logaddexp(0, -xd0)), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx)
+            yt0 = tt.tensor(xp.exp(-xp.logaddexp(zero, -xd0)), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx)
         ctx.save_for_backward(yt0)
         return yt0
 
@@ -176,8 +176,7 @@ class Sigmoid(Function):
     def backward(ctx, *grad_outputs):
         gd0, = grad_outputs
         yd0, = ctx.saved_tensors
-        xp = cp if gd0.__class__ is cparray else np
-        grad0 = gd0 * yd0 * xp.subtract(1, yd0, dtype=yd0.dtype)
+        grad0 = gd0 * yd0 * (one - yd0)
         return grad0
 
 
@@ -220,10 +219,10 @@ class Neg(Function):
         requires_grad = xt0.requires_grad
         if params['inplace']:
             inplace_precheck(xt0)
-            xp.neg(xd0, out=xd0)
+            xp.negative(xd0, out=xd0)
             yt0 = inplace_update(xt0, requires_grad, ctx)
         else:
-            yt0 = tt.tensor(xp.neg(xd0), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx)
+            yt0 = tt.tensor(xp.negative(xd0), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx)
         return yt0
 
     @staticmethod
@@ -260,8 +259,7 @@ class Add(Function):
             yt0 = inplace_update(xt0, requires_grad, ctx)
         else:
             yt0 = tt.tensor(xp.add(xd0, xd1), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx)
-        params['shape'] = (xd0.shape, xd1.shape)
-        ctx.params = params
+        ctx.params['shape'] = (xd0.shape, xd1.shape)
         return yt0
 
     @staticmethod
@@ -290,8 +288,7 @@ class Sub(Function):
             yt0 = inplace_update(xt0, requires_grad, ctx)
         else:
             yt0 = tt.tensor(xp.subtract(xd0, xd1), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx)
-        params['shape'] = (xd0.shape, xd1.shape)
-        ctx.params = params
+        ctx.params['shape'] = (xd0.shape, xd1.shape)
         return yt0
 
     @staticmethod
@@ -327,7 +324,6 @@ class Sin(Function):
         else:
             yt0 = tt.tensor(xp.sin(xd0), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx)
             ctx.save_for_backward(xt0)
-        ctx.params = params
         return yt0
 
     @staticmethod
@@ -366,7 +362,6 @@ class Cos(Function):
         else:
             yt0 = tt.tensor(xp.cos(xd0), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx)
             ctx.save_for_backward(xt0)
-        ctx.params = params
         return yt0
 
     @staticmethod
@@ -405,7 +400,6 @@ class Log(Function):
         else:
             yt0 = tt.tensor(xp.log(xd0), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx)
             ctx.save_for_backward(xt0)
-        ctx.params = params
         return yt0
 
     @staticmethod
@@ -443,7 +437,6 @@ class Abs(Function):
         else:
             yt0 = tt.tensor(xp.abs(xd0), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx)
             ctx.save_for_backward(xt0)
-        ctx.params = params
         return yt0
 
     @staticmethod
@@ -485,8 +478,7 @@ class Pow(Function):
         else:
             yt0 = tt.tensor(xp.power(xd0, xd1), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx)
             ctx.save_for_backward(xt0, xt1, yt0)
-        params['shape'] = (xd0.shape, xd1.shape)
-        ctx.params = params
+        ctx.params['shape'] = (xd0.shape, xd1.shape)
         return yt0
 
     @staticmethod
@@ -523,8 +515,7 @@ class Mul(Function):
         else:
             yt0 = tt.tensor(xp.multiply(xd0, xd1), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx)
             ctx.save_for_backward(xt0, xt1)
-        params['shape'] = (xd0.shape, xd1.shape)
-        ctx.params = params
+        ctx.params['shape'] = (xd0.shape, xd1.shape)
         return yt0
 
     @staticmethod
@@ -565,8 +556,7 @@ class Div(Function):
         else:
             yt0 = tt.tensor(xp.divide(xd0, xd1), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx)
             ctx.save_for_backward(xt0, xt1)
-        params['shape'] = (xd0.shape, xd1.shape)
-        ctx.params = params
+        ctx.params['shape'] = (xd0.shape, xd1.shape)
         return yt0
 
     @staticmethod
