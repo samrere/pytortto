@@ -58,11 +58,11 @@ Sigmoid:
   num_inputs: 1
   num_outputs: 1
   allow_inplace: True
-  forward_inplace: xp.exp(-xp.logaddexp(0, -..., out=...), out=...)
-  forward_outplace: xp.exp(-xp.logaddexp(0, -...))
+  forward_inplace: xp.exp(-xp.logaddexp(zero, -..., out=...), out=...)
+  forward_outplace: xp.exp(-xp.logaddexp(zero, -...))
   save_for_backward: yt0
   params:
-  backward: ["gd... * yd... * xp.subtract(1, yd..., dtype=yd....dtype)"]
+  backward: ["gd... * yd... * (one - yd...)"]
   alias: True
   long:
   alias_: True
@@ -86,8 +86,8 @@ Neg:
   num_inputs: 1
   num_outputs: 1
   allow_inplace: True
-  forward_inplace: xp.neg(..., out=...)
-  forward_outplace: xp.neg(...)
+  forward_inplace: xp.negative(..., out=...)
+  forward_outplace: xp.negative(...)
   save_for_backward:
   params:
   backward: ["-gd..."]

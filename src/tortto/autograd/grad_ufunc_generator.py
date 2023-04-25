@@ -56,8 +56,7 @@ special = """class Mul(Function):
         else:
             yt0 = tt.tensor(xp.multiply(xd0, xd1), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx)
             ctx.save_for_backward(xt0, xt1)
-        params['shape'] = (xd0.shape, xd1.shape)
-        ctx.params = params
+        ctx.params['shape'] = (xd0.shape, xd1.shape)
         return yt0
 
     @staticmethod
@@ -98,8 +97,7 @@ class Div(Function):
         else:
             yt0 = tt.tensor(xp.divide(xd0, xd1), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx)
             ctx.save_for_backward(xt0, xt1)
-        params['shape'] = (xd0.shape, xd1.shape)
-        ctx.params = params
+        ctx.params['shape'] = (xd0.shape, xd1.shape)
         return yt0
 
     @staticmethod
@@ -129,7 +127,7 @@ def generate_grad_ufunc():
         return
     with open(rf'{Path(__file__).parent}/grad_ufunc_config.yaml') as file:
         yml = yaml.load(file, Loader=yaml.FullLoader)
-        c('from tortto import np, cp, cparray\nfrom .function import *\nfrom .helper import *')
+        c('from tortto import np, cp, cparray, zero, one\nfrom .function import *\nfrom .helper import *')
         newline(2)
         c('"""')
         c("'x' is input\n'y' is output\n'g' is gradient")
@@ -197,9 +195,7 @@ def generate_grad_ufunc():
                     if save_for_backward is not None and copy_xt0 is False:
                         c(f"ctx.save_for_backward({save_for_backward})")
                     if params:
-                        c(f"params['{params}'] = ({', '.join(f'xd{i}.{params}' for i in range(num_inputs))})")
-                    if copy_xt0 or params:
-                        c('ctx.params = params')
+                        c(f"ctx.params['{params}'] = ({', '.join(f'xd{i}.{params}' for i in range(num_inputs))})")
                     c(f"return {', '.join(f'yt{i}' for i in range(num_outputs))}")
                 newline()
                 with indent('@staticmethod\ndef backward(ctx, *grad_outputs):'):

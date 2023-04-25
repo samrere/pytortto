@@ -50,11 +50,11 @@ SQRT_PI={float16: float16(math.sqrt(math.pi)), float32: float32(math.sqrt(math.p
 SQRT_2 = {float16: float16(math.sqrt(2)), float32: float32(math.sqrt(2)), float64: float64(math.sqrt(2))}
 SQRT_2_over_PI = {float16: float16(math.sqrt(2 / math.pi)), float32: float32(math.sqrt(2 / math.pi)),
                   float64: float64(math.sqrt(2 / math.pi))}
-CONST = {float16: float16(.044715), float32: float32(.044715), float64: float64(.044715)}
+
+
 _floating_point = {float16, float32, float64}
 
 # default functions using numpy
-np_erf = lambda x: np.tanh(SQRT_2_over_PI[x.dtype.type] * (x + CONST[x.dtype.type] * x * x * x))
 np_rfft2 = np.fft.rfft2
 np_irfft2 = np.fft.irfft2
 # if scipy is present, replace default numpy functions to scipy
@@ -67,6 +67,22 @@ if scipy_is_loaded:
 prod = math.prod if hasattr(math, 'prod') else np.prod
 
 class Relu(Function):
+    """
+import cupy as cp
+from cupyx.profiler import benchmark
+
+def relu(x):
+    return x * (x > 0)
+def relu_1(x):
+    return cp.maximum(x, 0)
+x = cp.random.random((128, 1024, 16, 16)).astype('f')
+
+print(benchmark(relu, (x,), n_repeat=2000))
+# relu:CPU:46.473 us+/-8.977 (min:41.558/max:181.217)us GPU-0:1234.155us+/-19.290(min:1200.064/max:1705.344)us
+
+print(benchmark(relu_1, (x,), n_repeat=2000))
+# relu_1:CPU:23.442us+/-7.013(min:19.443/max:129.968)us GPU-0:711.736us+/-13.863(min:690.176/max:960.096)us
+    """
     @staticmethod
     def forward(ctx, *inputs, **params):
         xt0, = inputs
@@ -75,12 +91,11 @@ class Relu(Function):
         requires_grad = xt0.requires_grad
         if inplace:
             inplace_precheck(xt0)
-            xd0 *= xd0>0
+            cp.maximum(xd0, 0, out=xd0) # maximum propagates NaNs, fmax doesn't
             yt0 = inplace_update(xt0, requires_grad, ctx)
         else:
-            yt0 = tt.tensor(xd0*(xd0>0), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx)
+            yt0 = tt.tensor(cp.maximum(xd0, 0), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx)
         ctx.save_for_backward(yt0)
-        ctx.params = params
         return yt0
     @staticmethod
     def backward(ctx, *grad_outputs):
@@ -111,7 +126,6 @@ class LeakyRelu(Function):
         else:
             yt0 = tt.tensor(xp.maximum(xd0 * negative_slope, xd0), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx)
         ctx.save_for_backward(xt0)
-        ctx.params = params
         return yt0
     @staticmethod
     def backward(ctx, *grad_outputs):
@@ -130,10 +144,10 @@ class Gelu(Function):
     def forward(ctx, *inputs, **params):
         xt0, = inputs
         xd0 = xt0.data
-        dtype=xd0.dtype.type
         approximate = params['approximate']
         requires_grad = xt0.requires_grad
         xp = cp if xd0.__class__ is cparray else np
+        dtype = xd0.dtype.type
         if approximate == 'none':
             if not scipy_is_loaded and xp is np: # if scipy is not installed, and x is in cpu
                 raise RuntimeError(f"SciPy is not installed, can't use approximate='none', set it to 'tanh' instead.")
@@ -142,10 +156,9 @@ class Gelu(Function):
             erf_s = xp.tanh(SQRT_2_over_PI[dtype] * (xd0 + dtype(.044715) * xd0 * xd0 * xd0))
         else:
             raise RuntimeError(f"approximate argument must be either none or tanh.")
-        yt0 = tt.tensor(dtype(0.5) * xd0 * (erf_s + dtype(1)), requires_grad=requires_grad, copy=False, _output_idx=0,
+        yt0 = tt.tensor(half * xd0 * (erf_s + one), requires_grad=requires_grad, copy=False, _output_idx=0,
                 grad_fn=ctx)
         ctx.save_for_backward(xt0)
-        ctx.params = params
         return yt0
     @staticmethod
     def backward(ctx, *grad_outputs):
@@ -154,135 +167,197 @@ class Gelu(Function):
         approximate = ctx.params['approximate']
         xp = cp if gd0.__class__ is cparray else np
         dtype = xd0.dtype.type
-        half = dtype(0.5)
         s = xd0 / SQRT_2[dtype]
         if approximate == 'none':
             erf_s = cp_special.erf(s) if xd0.__class__ is cparray else scipy_special.erf(s)
         else:
             erf_s = xp.tanh(SQRT_2_over_PI[dtype] * (xd0 + dtype(.044715) * xd0 * xd0 * xd0))
-        erf_p = dtype(2)/SQRT_PI[dtype] * xp.exp(-(s * s))
-        grad0 = gd0 * (half + half * erf_s + ((half * xd0 * erf_p) / SQRT_2[dtype]))
+        erf_p = two/SQRT_PI[dtype] * xp.exp(-(s * s))
+        grad0 = gd0 * (half + half * (erf_s + (xd0 * erf_p) / SQRT_2[dtype]))
         return grad0
 
 def gelu(input, approximate='none'):
     return Gelu.apply(input, approximate=approximate)
 
 #####################################################################################
-def mse_loss(inpt: Tensor, target: Tensor, reduction='mean'):
-    if inpt.shape != target.shape:
-        warnings.warn("Using a target size ({}) that is different to the input size ({}). "
-                      "This will likely lead to incorrect results due to broadcasting. "
-                      "Please ensure they have the same size.".format(target.shape, inpt.shape), stacklevel=2, )
-    loss = (inpt.data - target.data) ** 2
-    if reduction == 'mean':
-        loss = loss.mean()  # note: loss is now a numpy array not Tensor
-    elif reduction == 'sum':
-        loss = loss.sum()
-    elif reduction == 'none':
-        pass
-    else:
-        raise ValueError("{} is not a valid value for reduction".format(reduction))
-    output = build_links(loss, inpt.requires_grad, mse_loss, inpt, reduction=reduction, target=target)
-    return output
-
-
-@register_gradients(mse_loss)
-def backward(tensor, grad, params):
-    xp = cp if grad.__class__ is cparray else np
-    inputs = tensor.parents
-    target = params['target']
-    if inputs[0].requires_grad:
-        reduction = params['reduction']
-        value = 2 * grad * (inputs[0].data - target.data)
-        if reduction == 'none':
-            inputs[0].grad += value
+class MseLoss(Function):
+    @staticmethod
+    def forward(ctx, *inputs, **params):
+        xt0, xt1 = inputs # input, target
+        xd0, xd1 = xt0.data, xt1.data
+        reduction=params['reduction']
+        requires_grad = xt0.requires_grad | xt1.requires_grad
+        if xd0.shape != xd1.shape:
+            warnings.warn(f"Using a target size ({xd1.shape}) that is different to the input size ({xd0.shape}). "
+                          "This will likely lead to incorrect results due to broadcasting. "
+                          "Please ensure they have the same size.", stacklevel=2)
+        yd0 = (xd0 - xd1) ** 2
+        if reduction == 'mean':
+            yd0 = yd0.mean()  # note: loss is now a numpy array not Tensor
         elif reduction == 'sum':
-            inputs[0].grad += value
-        elif reduction == 'mean':
-            inputs[0].grad += xp.divide(value, inputs[0].numel(), dtype=grad.dtype)
+            yd0 = yd0.sum()
+        elif reduction == 'none':
+            pass
+        else:
+            raise ValueError(f"{reduction} is not a valid value for reduction")
+        yt0 = tt.tensor(yd0, requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx)
+        ctx.save_for_backward(xt0, xt1)
+        return yt0
+    @staticmethod
+    def backward(ctx, *grad_outputs):
+        """
+        import tortto as tt
+        x=tt.nparray(1.,dtype=tt.cp.float32)
+        y=x*x.dtype.type(3)
+        y1=x.dtype.type(3)*x
+        print(y.__class__)
+        print(y1.__class__)
+        """
+        gd0, = grad_outputs
+        xd0, xd1 = ctx.saved_tensors
+        reduction = ctx.params['reduction']
+        grad0 = gd0 * (xd0-xd1) * two
+        if reduction == 'mean':
+            grad0 /= xd0.size
+        return grad0 if ctx.needs_input_grad[0] else None, -grad0 if ctx.needs_input_grad[1] else None
+def mse_loss(input, target, reduction='mean'):
+    return MseLoss.apply(input, target, reduction=reduction)
 
-
-def binary_cross_entropy(inpt, target, weight=None, reduction='mean'):
-    if target.shape != inpt.shape:
-        raise ValueError("Target size ({}) must be the same as input size ({})".format(target.shape, inpt.shape))
-    x = inpt.data
-    xp = cp if x.__class__ is cparray else np
-    y = target.data
-    w = weight.data if weight is not None else 1
-    loss = -w * (y * xp.clip(xp.log(x), -100, None) + (1 - y) * xp.clip(xp.log(1-x), -100, None))
-    if reduction == 'mean':
-        loss = loss.mean()
-    elif reduction == 'sum':
-        loss = loss.sum()
-    elif reduction == 'none':
-        pass
-    else:
-        raise ValueError("{} is not a valid value for reduction".format(reduction))
-    output = build_links(loss, inpt.requires_grad, binary_cross_entropy, inpt, reduction=reduction, weight=w,
-                         target=target)
-    return output
-
-
-@register_gradients(binary_cross_entropy)
-def backward(tensor, grad, params):
-    xp = cp if grad.__class__ is cparray else np
-    inputs = tensor.parents
-    x = inputs[0].data
-    y = params['target'].data
-    w = params['weight']
-    if inputs[0].requires_grad:
+class BinaryCrossEntropy(Function):
+    @staticmethod
+    def forward(ctx, *inputs, **params):
+        xt0, xt1 = inputs # input, target
+        xd0, xd1 = xt0.data, xt1.data
         reduction = params['reduction']
-        # value = grad * -w * (y / x - (1 - y) / (1 - x))
-        value = grad * w * (x-y) * xp.clip(1 / x, None, 1e12) * xp.clip(1 / (1-x), None, 1e12)
-        if reduction == 'none':
-            inputs[0].grad += value
+        weight = params['weight']
+        if weight is None:
+            w=one
+        else:
+            w=xd0.dtype.type(weight.data) if weight.ndim == 0 else weight.data
+        requires_grad = xt0.requires_grad | xt1.requires_grad
+        if xd0.shape != xd1.shape:
+            warnings.warn(f"Using a target size ({xd1.shape}) that is different to the input size ({xd0.shape}). "
+                          "This will likely lead to incorrect results due to broadcasting. "
+                          "Please ensure they have the same size.", stacklevel=2)
+        xp = cp if xd0.__class__ is cparray else np
+
+        yd0 = -(xd1 * xp.clip(xp.log(xd0), neg_100, None) + (one - xd1) * xp.clip(xp.log(one-xd0), neg_100, None)) * w
+
+        if reduction == 'mean':
+            yd0 = yd0.mean()  # note: loss is now a numpy array not Tensor
         elif reduction == 'sum':
-            inputs[0].grad += value
-        elif reduction == 'mean':
-            inputs[0].grad += xp.divide(value, inputs[0].numel(), dtype=grad.dtype)
+            yd0 = yd0.sum()
+        elif reduction == 'none':
+            pass
+        else:
+            raise ValueError(f"{reduction} is not a valid value for reduction")
+        yt0 = tt.tensor(yd0, requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx)
+        ctx.save_for_backward(xt0, xt1, weight)
+        return yt0
+    @staticmethod
+    def backward(ctx, *grad_outputs):
+        gd0, = grad_outputs
+        reduction = ctx.params['reduction']
+        xd0, xd1, weight = ctx.saved_tensors
+        if weight is None:
+            w = one
+        else:
+            w = xd0.dtype.type(weight.data) if weight.ndim == 0 else weight.data
+        xp = cp if gd0.__class__ is cparray else np
+        common = gd0 * w
+        grad0, grad1 = None, None
+        if ctx.needs_input_grad[0]:
+            grad0 = common * (xd0-xd1) * xp.clip(one / xd0, None, e_12) * xp.clip(one / (one-xd0), None, e_12)
+            if reduction == 'mean':
+                grad0 /= xd0.size
+        if ctx.needs_input_grad[1]:
+            grad1 = common * xp.log(one / xd0 - one)
+            if reduction == 'mean':
+                grad1 /= xd1.size
+        return grad0, grad1
+def binary_cross_entropy(input, target, weight=None, reduction='mean'):
+    return BinaryCrossEntropy.apply(input, target, weight=weight, reduction=reduction)
 
 
-def binary_cross_entropy_with_logits(inpt, target, weight=None, pos_weight=None, reduction='mean'):
-    if target.shape != inpt.shape:
-        raise ValueError("Target size ({}) must be the same as input size ({})".format(target.shape, inpt.shape))
-    x = inpt.data
-    xp = cp if x.__class__ is cparray else np
-    y = target.data
-    w = weight.data if weight is not None else 1
-    p = pos_weight.data if pos_weight is not None else 1
-    log_sigmoid = x * (x < 0) - xp.log1p(xp.exp(-xp.abs(x)))
-    loss = w * ((y * (1 - p) - 1) * log_sigmoid + x - x * y)
-    if reduction == 'mean':
-        loss = loss.mean()
-    elif reduction == 'sum':
-        loss = loss.sum()
-    elif reduction == 'none':
-        pass
-    else:
-        raise ValueError("{} is not a valid value for reduction".format(reduction))
-    output = build_links(loss, inpt.requires_grad, binary_cross_entropy_with_logits, inpt, reduction=reduction,
-                         weight=w, target=target, pos_weight=p, log_sigmoid=log_sigmoid)
-    return output
+class BinaryCrossEntropyWithLogits(Function):
+    """
+import cupy as cp
+from cupyx.profiler import benchmark
 
+def logsig(x):
+    return x * (x < 0) - cp.log1p(cp.exp(-cp.abs(x)))
+def logsig_1(x):
+    return -cp.logaddexp(0,-x)
+x = cp.random.random((128, 512, 16, 16)).astype('f')
 
-@register_gradients(binary_cross_entropy_with_logits)
-def backward(tensor, grad, params):
-    xp = cp if grad.__class__ is cparray else np
-    inputs = tensor.parents
-    x = inputs[0].data
-    y = params['target'].data
-    log_sigmoid = params['log_sigmoid']
-    w = params['weight']
-    p = params['pos_weight']
-    if inputs[0].requires_grad:
+print(benchmark(logsig, (x,), n_repeat=200))
+# logsig: CPU:101.254us+/-14.007(min:94.604/max:228.097)us GPU-0:2532.766us+/-45.736(min:2510.592/max:2865.440)us
+print(benchmark(logsig_1, (x,), n_repeat=200))
+# logsig_1: CPU:43.562us+/-3.755(min:41.323/max:75.371)us GPU-0:1125.976us+/-7.451(min:1122.080/max:1166.752)us
+    """
+    @staticmethod
+    def forward(ctx, *inputs, **params):
+        xt0, xt1 = inputs  # input, target
+        xd0, xd1 = xt0.data, xt1.data
         reduction = params['reduction']
-        value = grad * (w * (y * (1 - p) - 1) * xp.exp(-x + log_sigmoid) + w * (1 - y))
-        if reduction == 'none':
-            inputs[0].grad += value
+        weight = params['weight']
+        pos_weight = params['pos_weight']
+        if weight is None:
+            w = one
+        else:
+            w = xd0.dtype.type(weight.data) if weight.ndim == 0 else weight.data
+        if pos_weight is None:
+            p = one
+        else:
+            p = xd0.dtype.type(pos_weight.data) if pos_weight.ndim == 0 else pos_weight.data
+        requires_grad = xt0.requires_grad | xt1.requires_grad
+        if xd0.shape != xd1.shape:
+            raise ValueError(f"Target size ({xd1.shape}) must be the same as input size ({xd0.shape})")
+        xp = cp if xd0.__class__ is cparray else np
+        log_sigmoid=xp.logaddexp(zero, -xd0)
+        yd0 = ((one - xd1 * (one - p)) * log_sigmoid + xd0 - xd0 * xd1) * w
+        if reduction == 'mean':
+            yd0 = yd0.mean()  # note: loss is now a numpy array not Tensor
         elif reduction == 'sum':
-            inputs[0].grad += value
-        elif reduction == 'mean':
-            inputs[0].grad += xp.divide(value, inputs[0].numel(), dtype=grad.dtype)
+            yd0 = yd0.sum()
+        elif reduction == 'none':
+            pass
+        else:
+            raise ValueError(f"{reduction} is not a valid value for reduction")
+        yt0 = tt.tensor(yd0, requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx)
+        ctx.save_for_backward(xt0, xt1, weight, pos_weight)
+        ctx.params['log_sigmoid']=log_sigmoid
+        return yt0
+    @staticmethod
+    def backward(ctx, *grad_outputs):
+        gd0, = grad_outputs
+        reduction = ctx.params['reduction']
+        log_sigmoid = ctx.params['log_sigmoid']
+        xd0, xd1, weight, pos_weight = ctx.saved_tensors
+        if weight is None:
+            w = one
+        else:
+            w = xd0.dtype.type(weight.data) if weight.ndim == 0 else weight.data
+        if pos_weight is None:
+            p = one
+        else:
+            p = xd0.dtype.type(pos_weight.data) if pos_weight.ndim == 0 else pos_weight.data
+        xp = cp if gd0.__class__ is cparray else np
+        common = gd0 * w
+        grad0, grad1 = None, None
+        if ctx.needs_input_grad[0]:
+            grad0 = common * ((xd1*(one-p)-one)*(one-xp.exp(-log_sigmoid))+one-xd1)
+            if reduction == 'mean':
+                grad0 /= xd0.size
+        if ctx.needs_input_grad[1]:
+            grad1 = common * ((p-one)*log_sigmoid-xd0)
+            if reduction == 'mean':
+                grad1 /= xd1.size
+        return grad0, grad1
+def binary_cross_entropy_with_logits(input, target, weight=None, pos_weight=None, reduction='mean'):
+    return BinaryCrossEntropyWithLogits.apply(input, target, weight=weight, pos_weight=pos_weight,reduction=reduction)
+
+##############################################################################
 
 
 def nll_loss(inpt, target, weight=None, ignore_index=-100, reduction='mean'):

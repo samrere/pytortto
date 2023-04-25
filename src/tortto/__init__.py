@@ -21,6 +21,14 @@ __version__ = '1.3.0'
 # so set _int_zero to int8
 _int_zero = np.int8(0)
 
+# same reason as above, initialize some numbers with the lowest possible precision.
+zero = np.uint8(0)
+one = np.uint8(1)
+two = np.uint8(2)
+half = np.float16(0.5)
+neg_100 = np.float16(-100)
+e_12 = np.float32(1e12)
+
 from .tensor import *
 from .VariableFunctions import *
 from .serialization import *

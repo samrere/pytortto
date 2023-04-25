@@ -12,7 +12,6 @@ class Permute(Function): # keep input _version: True
         xp = cp if xd0.__class__ is cparray else np
         requires_grad = xt0.requires_grad
         yt0 = tt.tensor(xp.transpose(xd0, params['dims']), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx)
-        ctx.params = params
         return yt0
     @staticmethod
     def backward(ctx, *grad_outputs):
@@ -45,7 +44,6 @@ class Transpose(Function): # keep input _version: True
         requires_grad = xt0.requires_grad
         dim0, dim1 = params['dim0'], params['dim1']
         yt0 = tt.tensor(xp.swapaxes(xd0, dim0,dim1), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx)
-        ctx.params = params
         return yt0
     @staticmethod
     def backward(ctx, *grad_outputs):
@@ -110,7 +108,7 @@ class Sum(Function):
         dim=params['dim']
         keepdim=params['keepdim']
         yt0 = tt.tensor(xp.sum(xd0, axis=dim, keepdims=keepdim), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn = ctx)
-        ctx.params = {'shape': xd0.shape, 'dim':dim, 'keepdim':keepdim}
+        ctx.params['shape']=xd0.shape
         return yt0
     @staticmethod
     def backward(ctx, *grad_outputs):
@@ -147,7 +145,6 @@ class Mean(Function):
         keepdim=params['keepdim']
         yt0 = tt.tensor(xp.mean(xd0, axis=dim, keepdims=keepdim), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn = ctx)
         ctx.save_for_backward(xt0)
-        ctx.params = params
         return yt0
     @staticmethod
     def backward(ctx, *grad_outputs):
@@ -187,7 +184,6 @@ class Var(Function):
         keepdim=params['keepdim']
         yt0 = tt.tensor(xp.var(xd0, axis=dim, ddof=unbiased, keepdims=keepdim), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn = ctx)
         ctx.save_for_backward(xt0)
-        ctx.params = params
         return yt0
     @staticmethod
     def backward(ctx, *grad_outputs):
@@ -228,9 +224,8 @@ class Cat(Function):
                 requires_grad=True
             indices.append(xt.shape[dim])
         indices = np.cumsum(indices)
-        params['indices']=indices
         yt0 = tt.tensor(xp.concatenate(xdn, dim), requires_grad=requires_grad, copy=False,_output_idx=0, grad_fn = ctx)
-        ctx.params = params
+        ctx.params['indices'] = indices
         return yt0
     @staticmethod
     def backward(ctx, *grad_outputs):
@@ -251,8 +246,7 @@ class Slice(Function): # keep input _version: True
         xd0 = xt0.data
         requires_grad = xt0.requires_grad
         yt0 = tt.tensor(xd0[params['key']], requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx, _version=xd0._version)
-        params['shape']=xd0.shape
-        ctx.params = params
+        ctx.params['shape']=xd0.shape
         return yt0
 
     @staticmethod
@@ -273,8 +267,7 @@ class View(Function): # keep input _version: True
         xd0 = xt0.data
         requires_grad = xt0.requires_grad
         yt0 = tt.tensor(xd0.reshape(params['shape']), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx, _version=xd0._version)
-        params['shape'] = xd0.shape
-        ctx.params = params
+        ctx.params['shape'] = xd0.shape
         return yt0
     @staticmethod
     def backward(ctx, *grad_outputs):
@@ -334,8 +327,7 @@ class Split(Function): # keep input _version: True
         ctx.save_for_backward(xt0)
         if ytn.__class__ is not tuple:
             ytn = (ytn,)
-        params['output_shapes'] = tuple(yt.shape for yt in ytn)
-        ctx.params = params
+        ctx.params['output_shapes'] = tuple(yt.shape for yt in ytn)
         return ytn
     @staticmethod
     def backward(ctx, *grad_outputs):
@@ -381,7 +373,6 @@ class ToCopy(Function): # keep input _version: False
                 if not cupy_is_loaded:
                     raise RuntimeError("cupy not installed, can't use cuda")
                 yt0=tt.tensor(cparray(xd0), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx)
-        ctx.params = params
         return yt0
     @staticmethod
     def backward(ctx, *grad_outputs):
@@ -403,9 +394,8 @@ class Repeat(Function): # keep input _version: False
         requires_grad = xt0.requires_grad
         xp = cp if xd0.__class__ is cparray else np
         yt0=tt.tensor(xp.tile(xd0, sizes), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx)
-        params['shape']=xd0.shape
-        params['yt0_strides']=yt0.strides
-        ctx.params = params
+        ctx.params['shape']=xd0.shape
+        ctx.params['yt0_strides']=yt0.strides
         return yt0
     @staticmethod
     def backward(ctx, *grad_outputs):
@@ -504,7 +494,6 @@ class Unsqueeze(Function): # keep input _version: True
         xp = cp if xd0.__class__ is cparray else np
         yt0 = tt.tensor(xp.expand_dims(xd0, dim), requires_grad=requires_grad, copy=False, _output_idx=0,
                         grad_fn=ctx, _version=xd0._version)
-        ctx.params=params
         return yt0
     @staticmethod
     def backward(ctx, *grad_outputs):
@@ -546,8 +535,7 @@ class MaskedFill(Function): # keep input _version: False (except in-place)
             xd0=xd0.copy()
             xd0[key]=xt1.data
             yt0=tt.tensor(xd0, requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx)
-        params['flag']=flag
-        ctx.params=params
+        ctx.params['flag']=flag
         return yt0
     @staticmethod
     def backward(ctx, *grad_outputs):
@@ -597,10 +585,8 @@ class CopySlices(Function): # keep input _version: True (it's inplace)
         xd0[key] = xd1
         yt0 = xt0
         inplace_update(yt0, requires_grad, ctx)
-
-        params['shapes']=(xd0.shape, xd1.shape)
-        params['flag']=flag
-        ctx.params = params
+        ctx.params['shapes']=(xd0.shape, xd1.shape)
+        ctx.params['flag']=flag
         return yt0
 
     @staticmethod
@@ -617,7 +603,6 @@ class CopySlices(Function): # keep input _version: True (it's inplace)
                 grad1 = nparray(grad1.get())
             elif flag is False:
                 grad1 = cparray(grad1)
-
         if ctx.needs_input_grad[0]:  # grad for input
             grad0 = gd0
             grad0[key] = 0
@@ -643,9 +628,7 @@ class Copy(Function): # keep input _version: True (it's inplace)
         xd0[...] = xd1
         yt0 = xt0
         inplace_update(yt0, requires_grad, ctx)
-
-        params['flag'] = flag
-        ctx.params = params
+        ctx.params['flag'] = flag
         return yt0
 
     @staticmethod

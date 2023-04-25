@@ -476,6 +476,8 @@ class Tensor:
                 gradient = np.expand_dims(nparray(1, dtype=self.dtype), axis=tuple(range(self.ndim)))
 
         elif isinstance(gradient, Tensor):
+            if gradient.device!=self.device:
+                raise RuntimeError(f"invalid gradient at index 0 - expected device {self.device} but got {gradient.device}")
             gradient = gradient.data
         if self.data.shape != gradient.shape:
             raise RuntimeError(f"grad can be implicitly created only for scalar outputs")

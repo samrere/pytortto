@@ -39,10 +39,11 @@ class BackwardFunction(FunctionBase): # metaclass for all grad_fn
                                f' (expected {len(self.needs_input_grad)}, got {len(out)})')
         ## backward assertion, commented out
         for o in out:
-            assert o.__class__ in {tt.cparray, tt.nparray}, f"backward output of {self.__class__.__name__} " \
-                                                            f"is {o.__class__}, not xparray"
-            for g in self.grad:
-                assert o.dtype.type is g.dtype.type, f"backward dtype error at {self.__class__.__name__}, " \
+            if o is not None:
+                assert o.__class__ in {tt.cparray, tt.nparray}, f"backward output of {self.__class__.__name__} " \
+                                                                f"is {o.__class__}, not xparray"
+                for g in self.grad:
+                    assert o.dtype.type is g.dtype.type, f"backward dtype error at {self.__class__.__name__}, " \
                                                      f"input grad is {g.dtype.type.__name__} " \
                                                      f"whereas output grad is {o.dtype.type.__name__}"
         return out
@@ -77,7 +78,7 @@ class Function(FunctionBase):
         grad_fn_class = type(cls.__name__ + 'Backward', (BackwardFunction,), {'_forward_cls': cls})
         cls._backward_cls = grad_fn_class
         grad_fn=grad_fn_class() # instantiate a grad_fn object
-        grad_fn.params=params
+        grad_fn.params = params
 
         ## check if output requires grad, as well as inplace precheck
         next_functions = []
@@ -103,6 +104,7 @@ class Function(FunctionBase):
 
         ## forward
         results = cls.forward(grad_fn, *inputs, **params)
+
         is_tensor=False
         if results.__class__ is tt.Tensor:
             is_tensor=True
@@ -110,6 +112,10 @@ class Function(FunctionBase):
 
         ## forward assertion, commented out
         for r in results:
+            if params.get('inplace'):
+                if inputs[0].data_ptr()!=r.data_ptr():
+                    raise RuntimeError(f"inplace is True but output address is {r.data_ptr()}, whereas "
+                                       f"address of inputs[0] is {inputs[0].data_ptr()}")
             assert r.data.__class__ in {tt.nparray, tt.cparray}, f'forward output of {cls.__name__} is ' \
                                                                  f'{r.data.__class__}, not xparray'
             for i in inputs:

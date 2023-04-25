@@ -47,9 +47,13 @@ class LeakyReLU(Module):
         return f'negative_slope={self.negative_slope}{inplace_str}'
 
 class GELU(Module):
-    def forward(self, tensor):
-        return F.gelu(tensor)
-
+    def __init__(self, approximate= 'none'):
+        super(GELU, self).__init__()
+        self.approximate = approximate
+    def forward(self, input):
+        return F.gelu(input, approximate=self.approximate)
+    def extra_repr(self):
+        return 'approximate={}'.format(repr(self.approximate))
 class Softmax(Module):
     def __init__(self, dim):
         super().__init__()
