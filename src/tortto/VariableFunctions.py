@@ -7,7 +7,8 @@ from tortto import np, cp, cparray
 
 def manual_seed(seed):
     np.random.seed(seed)
-    cp.random.seed(seed)
+    if tt.cupy_is_loaded:
+        cp.random.seed(seed)
 
 
 def _values_like(fcn, tensor, **kwargs):

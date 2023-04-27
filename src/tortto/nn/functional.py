@@ -240,9 +240,7 @@ class BinaryCrossEntropy(Function):
                           "This will likely lead to incorrect results due to broadcasting. "
                           "Please ensure they have the same size.", stacklevel=2)
         xp = cp if xd0.__class__ is cparray else np
-
         yd0 = -(xd1 * xp.clip(xp.log(xd0), neg_100, None) + (one - xd1) * xp.clip(xp.log(one-xd0), neg_100, None)) * w
-
         if reduction == 'mean':
             yd0 = yd0.mean()  # note: loss is now a numpy array not Tensor
         elif reduction == 'sum':
@@ -358,50 +356,79 @@ def binary_cross_entropy_with_logits(input, target, weight=None, pos_weight=None
     return BinaryCrossEntropyWithLogits.apply(input, target, weight=weight, pos_weight=pos_weight,reduction=reduction)
 
 ##############################################################################
+class NllLoss(Function): # input has ndim > 1
+    @staticmethod
+    def forward(ctx, *inputs, **params):
+        xt0, xt1 = inputs  # input, target
+        xd0, xd1 = xt0.data, xt1.data
+        reduction = params['reduction']
+        weight = params['weight']
+        ignore_index = params['ignore_index']
+        if xd0.ndim<1:
+            raise ValueError(f"Expected 1 or more dimensions (got {xd0.ndim})")
+        elif xd0.ndim==1:
+            xd0=xd0[None]
+        xp = cp if xd0.__class__ is cparray else np
+        if weight is None:
+            w = xp.ones((1, xd0.shape[-1]), dtype=bool)
+        else:
+            w = weight.data
+            if w.ndim==0 or w.shape[-1] != xd0.shape[-1]:
+                raise RuntimeError(f"weight tensor should be defined either for all {xd0.shape[-1]} classes"
+                                   f" or no classes but got weight tensor of shape: {w.shape}")
+        if not np.issubdtype(xd1.dtype, np.integer):
+            raise RuntimeError(f'expected scalar type Int but found {xd1.dtype}. '
+                               f'Use "dtype=int" when creating target tensor.')
 
 
-def nll_loss(inpt, target, weight=None, ignore_index=-100, reduction='mean'):
-    if not np.issubdtype(target.dtype, np.integer):
-        raise RuntimeError(
-            f'expected scalar type Int but found {target.dtype}. Use "dtype=int" when creating target tensor.')
-    x = inpt.data
-    xp = cp if x.__class__ is cparray else np
-    y = target.data
-    if weight is None:
-        w = xp.ones((1, x.shape[1]), dtype=bool)
-    else:
-        w = weight.data
-    dim = x.ndim
-    if dim < 2:
-        raise ValueError("Expected 2 or more dimensions (got {})".format(dim))
-    if x.shape[0] != y.shape[0]:
-        raise ValueError(
-            "Expected input batch_size ({}) to match target batch_size ({}).".format(x.shape[0], y.shape[0]))
-    if dim == 2:  # expand x dim to at least 3
-        x = x[..., None]
-    if y.ndim == 1:  # expand y dim to at least 2
-        y = y[..., None]
-    if y.shape[1:] != x.shape[2:]:
-        raise ValueError("Expected target size {}, got {}".format(x.shape[2:], y.shape))
 
-    ignored = (y != ignore_index)
-    idx = np.indices(y.shape, sparse=True)
-    criteria = (idx[0], y, *idx[1:])
-    coef = w[0, y] * ignored
-    loss = -x[criteria] * coef
-    N = None
-    if reduction == 'sum':
-        loss = loss.sum()
-    elif reduction == 'mean':
-        N = xp.count_nonzero(ignored)
-        loss = xp.divide(loss.sum(), N, dtype=x.dtype)
-    elif reduction == 'none':
-        pass
-    else:
-        raise ValueError("{} is not a valid value for reduction".format(reduction))
-    output = build_links(loss, inpt.requires_grad, nll_loss, inpt, reduction=reduction, coef=coef, criteria=criteria,
-                         N=N)
-    return output
+    @staticmethod
+    def backward(ctx, *grad_outputs):
+        ...
+def nll_loss(input, target, weight=None, ignore_index=-100, reduction='mean'):
+    return NllLoss.apply(input, target, weight=weight, ignore_index=ignore_index, reduction=reduction)
+# def nll_loss(inpt, target, weight=None, ignore_index=-100, reduction='mean'):
+#     if not np.issubdtype(target.dtype, np.integer):
+#         raise RuntimeError(
+#             f'expected scalar type Int but found {target.dtype}. Use "dtype=int" when creating target tensor.')
+#     x = inpt.data
+#     xp = cp if x.__class__ is cparray else np
+#     y = target.data
+#     if weight is None:
+#         w = xp.ones((1, x.shape[1]), dtype=bool)
+#     else:
+#         w = weight.data
+#     dim = x.ndim
+#     if dim < 2:
+#         raise ValueError("Expected 2 or more dimensions (got {})".format(dim))
+#     if x.shape[0] != y.shape[0]:
+#         raise ValueError(
+#             "Expected input batch_size ({}) to match target batch_size ({}).".format(x.shape[0], y.shape[0]))
+#     if dim == 2:  # expand x dim to at least 3
+#         x = x[..., None]
+#     if y.ndim == 1:  # expand y dim to at least 2
+#         y = y[..., None]
+#     if y.shape[1:] != x.shape[2:]:
+#         raise ValueError("Expected target size {}, got {}".format(x.shape[2:], y.shape))
+#
+#     ignored = (y != ignore_index)
+#     idx = np.indices(y.shape, sparse=True)
+#     criteria = (idx[0], y, *idx[1:])
+#     coef = w[0, y] * ignored
+#     loss = -x[criteria] * coef
+#     N = None
+#     if reduction == 'sum':
+#         loss = loss.sum()
+#     elif reduction == 'mean':
+#         N = xp.count_nonzero(ignored)
+#         loss = xp.divide(loss.sum(), N, dtype=x.dtype)
+#     elif reduction == 'none':
+#         pass
+#     else:
+#         raise ValueError("{} is not a valid value for reduction".format(reduction))
+#     output = build_links(loss, inpt.requires_grad, nll_loss, inpt, reduction=reduction, coef=coef, criteria=criteria,
+#                          N=N)
+#     return output
 
 
 @register_gradients(nll_loss)
