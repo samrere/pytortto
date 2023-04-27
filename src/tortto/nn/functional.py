@@ -68,20 +68,20 @@ prod = math.prod if hasattr(math, 'prod') else np.prod
 
 class Relu(Function):
     """
-import cupy as cp
-from cupyx.profiler import benchmark
+    import cupy as cp
+    from cupyx.profiler import benchmark
 
-def relu(x):
-    return x * (x > 0)
-def relu_1(x):
-    return cp.maximum(x, 0)
-x = cp.random.random((128, 1024, 16, 16)).astype('f')
+    def relu(x):
+        return x * (x > 0)
+    def relu_1(x):
+        return cp.maximum(x, 0)
+    x = cp.random.random((128, 1024, 16, 16)).astype('f')
 
-print(benchmark(relu, (x,), n_repeat=2000))
-# relu:CPU:46.473 us+/-8.977 (min:41.558/max:181.217)us GPU-0:1234.155us+/-19.290(min:1200.064/max:1705.344)us
+    print(benchmark(relu, (x,), n_repeat=2000))
+    # relu:CPU:46.473 us+/-8.977 (min:41.558/max:181.217)us GPU-0:1234.155us+/-19.290(min:1200.064/max:1705.344)us
 
-print(benchmark(relu_1, (x,), n_repeat=2000))
-# relu_1:CPU:23.442us+/-7.013(min:19.443/max:129.968)us GPU-0:711.736us+/-13.863(min:690.176/max:960.096)us
+    print(benchmark(relu_1, (x,), n_repeat=2000))
+    # relu_1:CPU:23.442us+/-7.013(min:19.443/max:129.968)us GPU-0:711.736us+/-13.863(min:690.176/max:960.096)us
     """
     @staticmethod
     def forward(ctx, *inputs, **params):
@@ -179,7 +179,7 @@ class Gelu(Function):
 def gelu(input, approximate='none'):
     return Gelu.apply(input, approximate=approximate)
 
-#####################################################################################
+
 class MseLoss(Function):
     @staticmethod
     def forward(ctx, *inputs, **params):
@@ -281,19 +281,19 @@ def binary_cross_entropy(input, target, weight=None, reduction='mean'):
 
 class BinaryCrossEntropyWithLogits(Function):
     """
-import cupy as cp
-from cupyx.profiler import benchmark
+    import cupy as cp
+    from cupyx.profiler import benchmark
 
-def logsig(x):
-    return x * (x < 0) - cp.log1p(cp.exp(-cp.abs(x)))
-def logsig_1(x):
-    return -cp.logaddexp(0,-x)
-x = cp.random.random((128, 512, 16, 16)).astype('f')
+    def logsig(x):
+        return x * (x < 0) - cp.log1p(cp.exp(-cp.abs(x)))
+    def logsig_1(x):
+        return -cp.logaddexp(0,-x)
+    x = cp.random.random((128, 512, 16, 16)).astype('f')
 
-print(benchmark(logsig, (x,), n_repeat=200))
-# logsig: CPU:101.254us+/-14.007(min:94.604/max:228.097)us GPU-0:2532.766us+/-45.736(min:2510.592/max:2865.440)us
-print(benchmark(logsig_1, (x,), n_repeat=200))
-# logsig_1: CPU:43.562us+/-3.755(min:41.323/max:75.371)us GPU-0:1125.976us+/-7.451(min:1122.080/max:1166.752)us
+    print(benchmark(logsig, (x,), n_repeat=200))
+    # logsig: CPU:101.254us+/-14.007(min:94.604/max:228.097)us GPU-0:2532.766us+/-45.736(min:2510.592/max:2865.440)us
+    print(benchmark(logsig_1, (x,), n_repeat=200))
+    # logsig_1: CPU:43.562us+/-3.755(min:41.323/max:75.371)us GPU-0:1125.976us+/-7.451(min:1122.080/max:1166.752)us
     """
     @staticmethod
     def forward(ctx, *inputs, **params):
