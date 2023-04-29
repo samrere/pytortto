@@ -11,7 +11,6 @@ with warnings.catch_warnings():
     os.environ['NPY_PROMOTION_STATE'] = 'weak'
     import numpy as np # reload numpy with NPY_PROMOTION_STATE='weak'
 
-# np._set_promotion_state('weak') # not safe
 assert np._get_promotion_state() == 'weak', "numpy import error"
 
 

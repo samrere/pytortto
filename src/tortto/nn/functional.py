@@ -330,11 +330,10 @@ class BinaryCrossEntropyWithLogits(Function):
 def binary_cross_entropy_with_logits(input, target, weight=None, pos_weight=None, reduction='mean'):
     return BinaryCrossEntropyWithLogits.apply(input, target, weight=weight, pos_weight=pos_weight,reduction=reduction)
 
-##############################################################################
 class NllLoss(Function): # input has ndim > 1
     @staticmethod
     def forward(ctx, *inputs, **params):
-        xt0, = inputs  # input, target
+        xt0, = inputs
         xt1 = params['target']
         xd0, xd1 = xt0.data, xt1.data
         reduction = params['reduction']
@@ -376,16 +375,15 @@ class NllLoss(Function): # input has ndim > 1
         return yt0
     @staticmethod
     def backward(ctx, *grad_outputs):
-
         gd0, = grad_outputs
         reduction = ctx.params['reduction']
         ignore_index = ctx.params['ignore_index']
         criteria = ctx.params['criteria']
-        xd0, xd1, w = ctx.saved_tensors
+        xd0, xd1, weight = ctx.saved_tensors
         xp = cp if gd0.__class__ is cparray else np
         # weight
-        if w is not None:
-            w = w[xd1]
+        if weight is not None:
+            w = weight[xd1]
             if ignore_index >= 0:
                 w *= xd1 != ignore_index
         else:
@@ -394,72 +392,81 @@ class NllLoss(Function): # input has ndim > 1
         if reduction == 'mean':
             gd0/=ctx.params['N']
         grad0 = xp.zeros_like(xd0)
-        grad0[criteria]=-gd0 if w is None else -gd0*w
-
+        grad0[criteria]=-gd0 if weight is None else -gd0*w
         return grad0
 
 def nll_loss(input, target, weight=None, ignore_index=-100, reduction='mean'):
     return NllLoss.apply(input, target=target, weight=weight, ignore_index=ignore_index, reduction=reduction)
 
-############################################################################################
+class Softmax(Function):
+    @staticmethod
+    def forward(ctx, *inputs, **params):
+        xt0, = inputs
+        xd0 = xt0.data
+        dim = params['dim']
+        requires_grad = xt0.requires_grad
+        xp = cp if xd0.__class__ is cparray else np
+        aug = xd0 - xp.max(xd0, axis=dim, keepdims=True)
+        exp = xp.exp(aug)
+        sum_exp = xp.sum(exp, axis=dim, keepdims=True)
+        yt0 = tt.tensor(exp / sum_exp, requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx)
+        ctx.save_for_backward(yt0)
+        return yt0
+    @staticmethod
+    def backward(ctx, *grad_outputs):
+        gd0, = grad_outputs
+        dim=ctx.params['dim']
+        yd0,=ctx.saved_tensors
+        grad0=(gd0 - (gd0 * yd0).sum(dim, keepdims=True)) * yd0
+        return grad0
+def softmax(input, dim):
+    return Softmax.apply(input, dim=dim)
 
-def softmax(inpt: Tensor, dim=None):
-    x = inpt.data
-    xp = cp if x.__class__ is cparray else np
-    axis_aug = x - xp.max(x, axis=dim, keepdims=True)
-    axis_exp = xp.exp(axis_aug)
-    axis_sum_exp = xp.sum(axis_exp, axis=dim, keepdims=True)
-    output = build_links(axis_exp / axis_sum_exp, inpt.requires_grad, softmax, inpt, axis=dim)
-    return output
+class LogSoftmax(Function):
+    @staticmethod
+    def forward(ctx, *inputs, **params):
+        xt0, = inputs
+        xd0 = xt0.data
+        dim = params['dim']
+        requires_grad = xt0.requires_grad
+        xp = cp if xd0.__class__ is cparray else np
+        aug = xd0 - xp.max(xd0, axis=dim, keepdims=True)
+        log_sum_exp = xp.log(xp.sum(xp.exp(aug), axis=dim, keepdims=True))
+        yt0 = tt.tensor(aug-log_sum_exp, requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx)
+        ctx.save_for_backward(yt0)
+        return yt0
+    @staticmethod
+    def backward(ctx, *grad_outputs):
+        gd0, = grad_outputs
+        dim = ctx.params['dim']
+        yd0, = ctx.saved_tensors
+        xp=cp if gd0.__class__ is cparray else np
+        grad0 = gd0 - gd0.sum(axis=dim, keepdims=True) * xp.exp(yd0)
+        return grad0
+def log_softmax(input, dim):
+    return LogSoftmax.apply(input, dim=dim)
 
+class LogSigmoid(Function):
+    @staticmethod
+    def forward(ctx, *inputs, **params):
+        xt0, = inputs
+        xd0 = xt0.data
+        requires_grad = xt0.requires_grad
+        xp = cp if xd0.__class__ is cparray else np
+        yt0 = tt.tensor(-xp.logaddexp(0,-xd0), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx)
+        ctx.save_for_backward(xt0,)
+        return yt0
+    @staticmethod
+    def backward(ctx, *grad_outputs):
+        gd0, = grad_outputs
+        xd0,= ctx.saved_tensors
+        xp = cp if gd0.__class__ is cparray else np
+        grad0 = gd0 * xp.exp(-xd0 + -xp.logaddexp(0,-xd0))
+        return grad0
+def logsigmoid(input):
+    return LogSigmoid.apply(input)
 
-@register_gradients(softmax)
-def backward(tensor: Tensor, grad, params):
-    inputs = tensor.parents
-    if inputs[0].requires_grad:
-        dim = params['axis']
-        y = tensor.data
-        inputs[0].grad += (grad - (grad * y).sum(dim, keepdims=True)) * y
-
-
-def log_softmax(inpt: Tensor, dim=None):
-    x = inpt.data
-    xp = cp if x.__class__ is cparray else np
-    axis_aug = x - xp.max(x, axis=dim, keepdims=True)
-    axis_exp = xp.exp(axis_aug)
-    axis_sum_exp = xp.sum(axis_exp, axis=dim, keepdims=True)
-    axis_log_sum_exp = xp.log(axis_sum_exp)
-    output = build_links(axis_aug - axis_log_sum_exp, inpt.requires_grad, log_softmax, inpt, axis=dim,
-                         softmax=axis_exp / axis_sum_exp)
-    return output
-
-
-@register_gradients(log_softmax)
-def backward(tensor: Tensor, grad, params):
-    inputs = tensor.parents
-    if inputs[0].requires_grad:
-        dim = params['axis']
-        y = params['softmax']
-        inputs[0].grad += grad - grad.sum(axis=dim, keepdims=True) * y
-
-
-def logsigmoid(inpt):
-    x = inpt.data
-    xp = cp if x.__class__ is cparray else np
-    value = x * (x < 0) - xp.log1p(xp.exp(-xp.abs(x)))
-    output = build_links(value, inpt.requires_grad, logsigmoid, inpt)
-    return output
-
-
-@register_gradients(logsigmoid)
-def backward(tensor: Tensor, grad, params):
-    xp = cp if grad.__class__ is cparray else np
-    inputs = tensor.parents
-    if inputs[0].requires_grad:
-        x = inputs[0].data
-        inputs[0].grad += grad * xp.exp(-x + tensor.data)
-
-
+######################################################
 def linear(inpt: Tensor, weight: Tensor, bias=None):
     # https://pytorch.org/docs/stable/generated/torch.nn.Linear.html
     # linear is defined as y=X@A.T+b
