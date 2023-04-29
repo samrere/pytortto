@@ -37,7 +37,8 @@ class BackwardFunction(FunctionBase): # metaclass for all grad_fn
         if len(out)!=len(self.needs_input_grad):
             raise RuntimeError(f'function {self.__class__.__name__} returned an incorrect number of gradients'
                                f' (expected {len(self.needs_input_grad)}, got {len(out)})')
-        ## backward assertion, commented out
+
+        ## backward assertion, comment it out
         for o in out:
             if o is not None:
                 assert o.__class__ in {tt.cparray, tt.nparray}, f"backward output of {self.__class__.__name__} " \
@@ -50,6 +51,11 @@ class BackwardFunction(FunctionBase): # metaclass for all grad_fn
 
 class AccumulateGrad(BackwardFunction):
     def apply(self, *args):
+
+        # shape assertion, comment it out
+        assert self.grad[0].shape == self.variable.shape, f"backward shape error. grad shape is {self.grad[0].shape} " \
+                                                          f"whereas variable shape is {self.variable.shape}"
+
         if self.variable.grad is None:
             self.variable.grad = self.grad[0]
         else:
@@ -91,7 +97,7 @@ class Function(FunctionBase):
                     acc_grad = AccumulateGrad()
                     acc_grad.variable = i
                     acc_grad.prev_function_counts+=1
-                    acc_grad.grad = [tt._int_zero]
+                    acc_grad.grad = [None]
                     acc_grad.next_functions=tuple()
                     next_functions.append((acc_grad, 0))
                 else:
@@ -110,7 +116,7 @@ class Function(FunctionBase):
             is_tensor=True
             results = (results,)
 
-        ## forward assertion, commented out
+        ## forward assertion, comment it out
         for r in results:
             if params.get('inplace'):
                 if inputs[0].data_ptr()!=r.data_ptr():
@@ -124,7 +130,7 @@ class Function(FunctionBase):
                                                                f"output is {r.data.dtype.type.__name__}"
 
 
-        grad_fn.grad = [tt._int_zero] * len(results)
+        grad_fn.grad = [None] * len(results)
 
         if not is_grad_enabled(): # if using tortto.no_grad(), disable requires_grad
             for r in results:

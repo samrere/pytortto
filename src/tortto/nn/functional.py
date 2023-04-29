@@ -1,21 +1,6 @@
 """"""
 """
-datatype inconsistencies in numpy:
-1. a small float32 / large int will result in float64:
-    x=np.array([0.01],dtype=np.float32)
-    y=x/(128*32*32)
-    y.dtype --> float64
-2. operations on float32 array scalar will result in float64
-    x=np.float32(3)
-    y=x+2 # or x*2 or x/2 ...
-    y.dtype --> float64
-solution:
-use ufuncs such as np.add, np.divide, ... and specify dtype:
-    x=np.array([0.01],dtype=np.float32)
-    y=np.divide(x, 128*32*32, dtype=np.float32)
 
-DO NOT: don't use y=x/np.array(128*32*32, dtype=np.float32). it's slow in cupy
-########################################################################################################################
 contiguous issue: conv2d and conv_transpose2d is slow when incoming data is not contiguous:
 ```
 import tortto as tt
@@ -89,12 +74,13 @@ class Relu(Function):
         xd0 = xt0.data
         inplace = params['inplace']
         requires_grad = xt0.requires_grad
+        xp = cp if xd0.__class__ is cparray else np
         if inplace:
             inplace_precheck(xt0)
-            cp.maximum(xd0, 0, out=xd0) # maximum propagates NaNs, fmax doesn't
+            xp.maximum(xd0, 0, out=xd0) # maximum propagates NaNs, fmax doesn't
             yt0 = inplace_update(xt0, requires_grad, ctx)
         else:
-            yt0 = tt.tensor(cp.maximum(xd0, 0), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx)
+            yt0 = tt.tensor(xp.maximum(xd0, 0), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx)
         ctx.save_for_backward(yt0)
         return yt0
     @staticmethod
@@ -153,11 +139,10 @@ class Gelu(Function):
                 raise RuntimeError(f"SciPy is not installed, can't use approximate='none', set it to 'tanh' instead.")
             erf_s = cp_special.erf(xd0/SQRT_2[dtype]) if xd0.__class__ is cparray else scipy_special.erf(xd0/SQRT_2[dtype])
         elif approximate == 'tanh':
-            erf_s = xp.tanh(SQRT_2_over_PI[dtype] * (xd0 + dtype(.044715) * xd0 * xd0 * xd0))
+            erf_s = xp.tanh(SQRT_2_over_PI[dtype] * (xd0 + .044715 * xd0 * xd0 * xd0))
         else:
             raise RuntimeError(f"approximate argument must be either none or tanh.")
-        yt0 = tt.tensor(half * xd0 * (erf_s + one), requires_grad=requires_grad, copy=False, _output_idx=0,
-                grad_fn=ctx)
+        yt0 = tt.tensor(0.5 * xd0 * (erf_s + 1), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx)
         ctx.save_for_backward(xt0)
         return yt0
     @staticmethod
@@ -171,9 +156,9 @@ class Gelu(Function):
         if approximate == 'none':
             erf_s = cp_special.erf(s) if xd0.__class__ is cparray else scipy_special.erf(s)
         else:
-            erf_s = xp.tanh(SQRT_2_over_PI[dtype] * (xd0 + dtype(.044715) * xd0 * xd0 * xd0))
-        erf_p = two/SQRT_PI[dtype] * xp.exp(-(s * s))
-        grad0 = gd0 * (half + half * (erf_s + (xd0 * erf_p) / SQRT_2[dtype]))
+            erf_s = xp.tanh(SQRT_2_over_PI[dtype] * (xd0 + .044715 * xd0 * xd0 * xd0))
+        erf_p = 2/SQRT_PI[dtype] * xp.exp(-(s * s))
+        grad0 = gd0 * (0.5 + 0.5 * (erf_s + (xd0 * erf_p) / SQRT_2[dtype]))
         return grad0
 
 def gelu(input, approximate='none'):
@@ -216,7 +201,7 @@ class MseLoss(Function):
         gd0, = grad_outputs
         xd0, xd1 = ctx.saved_tensors
         reduction = ctx.params['reduction']
-        grad0 = gd0 * (xd0-xd1) * two
+        grad0 = gd0 * (xd0-xd1) * 2
         if reduction == 'mean':
             grad0 /= xd0.size
         return grad0 if ctx.needs_input_grad[0] else None, -grad0 if ctx.needs_input_grad[1] else None
@@ -230,19 +215,17 @@ class BinaryCrossEntropy(Function):
         xd0, xd1 = xt0.data, xt1.data
         reduction = params['reduction']
         weight = params['weight']
-        if weight is None:
-            w=one
-        else:
-            w=xd0.dtype.type(weight.data) if weight.ndim == 0 else weight.data
         requires_grad = xt0.requires_grad | xt1.requires_grad
         if xd0.shape != xd1.shape:
             warnings.warn(f"Using a target size ({xd1.shape}) that is different to the input size ({xd0.shape}). "
                           "This will likely lead to incorrect results due to broadcasting. "
                           "Please ensure they have the same size.", stacklevel=2)
         xp = cp if xd0.__class__ is cparray else np
-        yd0 = -(xd1 * xp.clip(xp.log(xd0), neg_100, None) + (one - xd1) * xp.clip(xp.log(one-xd0), neg_100, None)) * w
+        yd0 = -(xd1 * xp.clip(xp.log(xd0), -100, None) + (1 - xd1) * xp.clip(xp.log(1 - xd0), -100, None))
+        if weight is not None:
+            yd0*=weight.data
         if reduction == 'mean':
-            yd0 = yd0.mean()  # note: loss is now a numpy array not Tensor
+            yd0 = yd0.mean()
         elif reduction == 'sum':
             yd0 = yd0.sum()
         elif reduction == 'none':
@@ -257,19 +240,15 @@ class BinaryCrossEntropy(Function):
         gd0, = grad_outputs
         reduction = ctx.params['reduction']
         xd0, xd1, weight = ctx.saved_tensors
-        if weight is None:
-            w = one
-        else:
-            w = xd0.dtype.type(weight.data) if weight.ndim == 0 else weight.data
         xp = cp if gd0.__class__ is cparray else np
-        common = gd0 * w
+        common = gd0 if weight is None else gd0 * weight.data
         grad0, grad1 = None, None
         if ctx.needs_input_grad[0]:
-            grad0 = common * (xd0-xd1) * xp.clip(one / xd0, None, e_12) * xp.clip(one / (one-xd0), None, e_12)
+            grad0 = common * (xd0-xd1) * xp.clip(1 / xd0, None, 1e12) * xp.clip(1 / (1-xd0), None, 1e12)
             if reduction == 'mean':
                 grad0 /= xd0.size
         if ctx.needs_input_grad[1]:
-            grad1 = common * xp.log(one / xd0 - one)
+            grad1 = common * xp.log(1 / xd0 - 1)
             if reduction == 'mean':
                 grad1 /= xd1.size
         return grad0, grad1
@@ -300,20 +279,17 @@ class BinaryCrossEntropyWithLogits(Function):
         reduction = params['reduction']
         weight = params['weight']
         pos_weight = params['pos_weight']
-        if weight is None:
-            w = one
-        else:
-            w = xd0.dtype.type(weight.data) if weight.ndim == 0 else weight.data
-        if pos_weight is None:
-            p = one
-        else:
-            p = xd0.dtype.type(pos_weight.data) if pos_weight.ndim == 0 else pos_weight.data
         requires_grad = xt0.requires_grad | xt1.requires_grad
         if xd0.shape != xd1.shape:
             raise ValueError(f"Target size ({xd1.shape}) must be the same as input size ({xd0.shape})")
         xp = cp if xd0.__class__ is cparray else np
-        log_sigmoid=xp.logaddexp(zero, -xd0)
-        yd0 = ((one - xd1 * (one - p)) * log_sigmoid + xd0 - xd0 * xd1) * w
+        log_sigmoid=xp.logaddexp(0, -xd0)
+        if pos_weight is None:
+            yd0 = log_sigmoid + xd0 - xd0 * xd1
+        else:
+            yd0 = (1 - xd1 * (1 - pos_weight.data)) * log_sigmoid + xd0 - xd0 * xd1
+        if weight is not None:
+            yd0*=weight.data
         if reduction == 'mean':
             yd0 = yd0.mean()  # note: loss is now a numpy array not Tensor
         elif reduction == 'sum':
@@ -332,23 +308,22 @@ class BinaryCrossEntropyWithLogits(Function):
         reduction = ctx.params['reduction']
         log_sigmoid = ctx.params['log_sigmoid']
         xd0, xd1, weight, pos_weight = ctx.saved_tensors
-        if weight is None:
-            w = one
-        else:
-            w = xd0.dtype.type(weight.data) if weight.ndim == 0 else weight.data
-        if pos_weight is None:
-            p = one
-        else:
-            p = xd0.dtype.type(pos_weight.data) if pos_weight.ndim == 0 else pos_weight.data
         xp = cp if gd0.__class__ is cparray else np
-        common = gd0 * w
+        common = gd0 if weight is None else gd0 * weight.data
         grad0, grad1 = None, None
         if ctx.needs_input_grad[0]:
-            grad0 = common * ((xd1*(one-p)-one)*(one-xp.exp(-log_sigmoid))+one-xd1)
+            if pos_weight is None:
+                grad0 = common * (xp.exp(-log_sigmoid)-xd1)
+            else:
+                grad0 = common * ((xd1*(1-pos_weight.data)-1)*(1-xp.exp(-log_sigmoid))+1-xd1)
             if reduction == 'mean':
                 grad0 /= xd0.size
         if ctx.needs_input_grad[1]:
-            grad1 = common * ((p-one)*log_sigmoid-xd0)
+            if pos_weight is None:
+                grad1 = common * -xd0
+            else:
+                grad1 = common * ((pos_weight.data-1)*log_sigmoid-xd0)
+
             if reduction == 'mean':
                 grad1 /= xd1.size
         return grad0, grad1
@@ -359,98 +334,74 @@ def binary_cross_entropy_with_logits(input, target, weight=None, pos_weight=None
 class NllLoss(Function): # input has ndim > 1
     @staticmethod
     def forward(ctx, *inputs, **params):
-        xt0, xt1 = inputs  # input, target
+        xt0, = inputs  # input, target
+        xt1 = params['target']
         xd0, xd1 = xt0.data, xt1.data
         reduction = params['reduction']
         weight = params['weight']
         ignore_index = params['ignore_index']
-        if xd0.ndim<1:
-            raise ValueError(f"Expected 1 or more dimensions (got {xd0.ndim})")
-        elif xd0.ndim==1:
-            xd0=xd0[None]
+        requires_grad = xt0.requires_grad
         xp = cp if xd0.__class__ is cparray else np
-        if weight is None:
-            w = xp.ones((1, xd0.shape[-1]), dtype=bool)
+        # weight
+        w=None
+        if weight is not None:
+            w=weight.data[xd1]
+            if ignore_index>=0:
+                w *= xd1 != ignore_index
         else:
-            w = weight.data
-            if w.ndim==0 or w.shape[-1] != xd0.shape[-1]:
-                raise RuntimeError(f"weight tensor should be defined either for all {xd0.shape[-1]} classes"
-                                   f" or no classes but got weight tensor of shape: {w.shape}")
-        if not np.issubdtype(xd1.dtype, np.integer):
-            raise RuntimeError(f'expected scalar type Int but found {xd1.dtype}. '
-                               f'Use "dtype=int" when creating target tensor.')
-
-
-
+            if ignore_index>=0:
+                w = xd1 != ignore_index # w is int64
+        idx = np.indices(xd1.shape, sparse=True)
+        criteria = xd1 if len(idx)==0 else (idx[0], xd1, *idx[1:])
+        yd0 = -xd0[criteria]
+        if w is not None:
+            yd0*=w
+        if reduction == 'sum':
+            yd0 = yd0.sum()
+        elif reduction == 'mean':
+            if w is None:
+                N=yd0.size
+                yd0=yd0.mean()
+            else:
+                N = xp.count_nonzero(w)
+                yd0=yd0.sum()/N
+            ctx.params['N']=N
+        elif reduction == 'none':
+            pass
+        else:
+            raise ValueError("{} is not a valid value for reduction".format(reduction))
+        yt0=tt.tensor(yd0, requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx)
+        ctx.save_for_backward(xt0, xt1, weight)
+        ctx.params['criteria'] = criteria
+        return yt0
     @staticmethod
     def backward(ctx, *grad_outputs):
-        ...
-def nll_loss(input, target, weight=None, ignore_index=-100, reduction='mean'):
-    return NllLoss.apply(input, target, weight=weight, ignore_index=ignore_index, reduction=reduction)
-# def nll_loss(inpt, target, weight=None, ignore_index=-100, reduction='mean'):
-#     if not np.issubdtype(target.dtype, np.integer):
-#         raise RuntimeError(
-#             f'expected scalar type Int but found {target.dtype}. Use "dtype=int" when creating target tensor.')
-#     x = inpt.data
-#     xp = cp if x.__class__ is cparray else np
-#     y = target.data
-#     if weight is None:
-#         w = xp.ones((1, x.shape[1]), dtype=bool)
-#     else:
-#         w = weight.data
-#     dim = x.ndim
-#     if dim < 2:
-#         raise ValueError("Expected 2 or more dimensions (got {})".format(dim))
-#     if x.shape[0] != y.shape[0]:
-#         raise ValueError(
-#             "Expected input batch_size ({}) to match target batch_size ({}).".format(x.shape[0], y.shape[0]))
-#     if dim == 2:  # expand x dim to at least 3
-#         x = x[..., None]
-#     if y.ndim == 1:  # expand y dim to at least 2
-#         y = y[..., None]
-#     if y.shape[1:] != x.shape[2:]:
-#         raise ValueError("Expected target size {}, got {}".format(x.shape[2:], y.shape))
-#
-#     ignored = (y != ignore_index)
-#     idx = np.indices(y.shape, sparse=True)
-#     criteria = (idx[0], y, *idx[1:])
-#     coef = w[0, y] * ignored
-#     loss = -x[criteria] * coef
-#     N = None
-#     if reduction == 'sum':
-#         loss = loss.sum()
-#     elif reduction == 'mean':
-#         N = xp.count_nonzero(ignored)
-#         loss = xp.divide(loss.sum(), N, dtype=x.dtype)
-#     elif reduction == 'none':
-#         pass
-#     else:
-#         raise ValueError("{} is not a valid value for reduction".format(reduction))
-#     output = build_links(loss, inpt.requires_grad, nll_loss, inpt, reduction=reduction, coef=coef, criteria=criteria,
-#                          N=N)
-#     return output
 
-
-@register_gradients(nll_loss)
-def backward(tensor, grad, params):
-    xp = cp if grad.__class__ is cparray else np
-    inputs = tensor.parents
-    x = inputs[0].data
-    if x.ndim == 2:
-        x = x[..., None]
-    criteria = params['criteria']
-    coef = params['coef']
-    if inputs[0].requires_grad:
-        reduction = params['reduction']
-        value = -grad * coef
+        gd0, = grad_outputs
+        reduction = ctx.params['reduction']
+        ignore_index = ctx.params['ignore_index']
+        criteria = ctx.params['criteria']
+        xd0, xd1, w = ctx.saved_tensors
+        xp = cp if gd0.__class__ is cparray else np
+        # weight
+        if w is not None:
+            w = w[xd1]
+            if ignore_index >= 0:
+                w *= xd1 != ignore_index
+        else:
+            if ignore_index >= 0:
+                w = xd1 != ignore_index
         if reduction == 'mean':
-            N = params['N']
-            value = xp.divide(value, N, dtype=grad.dtype)
-        inputs[0].grad = xp.zeros_like(x)
-        inputs[0].grad[criteria] = value
-        if inputs[0].data.ndim == 2:  # if ndim of original input is 2, delete the last axis
-            inputs[0].grad = inputs[0].grad[..., 0]
+            gd0/=ctx.params['N']
+        grad0 = xp.zeros_like(xd0)
+        grad0[criteria]=-gd0 if w is None else -gd0*w
 
+        return grad0
+
+def nll_loss(input, target, weight=None, ignore_index=-100, reduction='mean'):
+    return NllLoss.apply(input, target=target, weight=weight, ignore_index=ignore_index, reduction=reduction)
+
+############################################################################################
 
 def softmax(inpt: Tensor, dim=None):
     x = inpt.data

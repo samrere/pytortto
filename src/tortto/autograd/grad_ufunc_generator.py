@@ -127,7 +127,7 @@ def generate_grad_ufunc():
         return
     with open(rf'{Path(__file__).parent}/grad_ufunc_config.yaml') as file:
         yml = yaml.load(file, Loader=yaml.FullLoader)
-        c('from tortto import np, cp, cparray, zero, one\nfrom .function import *\nfrom .helper import *')
+        c('from tortto import np, cp, cparray\nfrom .function import *\nfrom .helper import *')
         newline(2)
         c('"""')
         c("'x' is input\n'y' is output\n'g' is gradient")

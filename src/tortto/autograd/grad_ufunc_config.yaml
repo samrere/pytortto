@@ -6,7 +6,7 @@ Sqrt:
   forward_outplace: xp.sqrt(...)
   save_for_backward: yt0
   params:
-  backward: ["gd... / xp.multiply(yd..., 2, dtype=yd....dtype)"]
+  backward: ["gd... / (yd... * 2)"]
   alias: True
   long:
   alias_: True
@@ -34,7 +34,7 @@ Tan:
   forward_outplace: xp.tan(...)
   save_for_backward: yt0
   params:
-  backward: ["gd... * xp.add(1, yd... * yd..., dtype=yd....dtype)"]
+  backward: ["gd... * (1 + yd... * yd...)"]
   alias: True
   long:
   alias_: True
@@ -48,7 +48,7 @@ Tanh:
   forward_outplace: xp.tanh(...)
   save_for_backward: yt0
   params:
-  backward: ["gd... * xp.subtract(1, yd... * yd..., dtype=yd....dtype)"]
+  backward: ["gd... * (1 - yd... * yd...)"]
   alias: True
   long:
   alias_: True
@@ -58,11 +58,11 @@ Sigmoid:
   num_inputs: 1
   num_outputs: 1
   allow_inplace: True
-  forward_inplace: xp.exp(-xp.logaddexp(zero, -..., out=...), out=...)
-  forward_outplace: xp.exp(-xp.logaddexp(zero, -...))
+  forward_inplace: xp.exp(-xp.logaddexp(0, -..., out=...), out=...)
+  forward_outplace: xp.exp(-xp.logaddexp(0, -...))
   save_for_backward: yt0
   params:
-  backward: ["gd... * yd... * (one - yd...)"]
+  backward: ["gd... * yd... * (1 - yd...)"]
   alias: True
   long:
   alias_: True

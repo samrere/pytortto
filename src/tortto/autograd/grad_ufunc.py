@@ -1,4 +1,4 @@
-from tortto import np, cp, cparray, zero, one
+from tortto import np, cp, cparray
 from .function import *
 from .helper import *
 
@@ -45,8 +45,7 @@ class Sqrt(Function):
     def backward(ctx, *grad_outputs):
         gd0, = grad_outputs
         yd0, = ctx.saved_tensors
-        xp = cp if gd0.__class__ is cparray else np
-        grad0 = gd0 / xp.multiply(yd0, 2, dtype=yd0.dtype)
+        grad0 = gd0 / (yd0 * 2)
         return grad0
 
 
@@ -110,8 +109,7 @@ class Tan(Function):
     def backward(ctx, *grad_outputs):
         gd0, = grad_outputs
         yd0, = ctx.saved_tensors
-        xp = cp if gd0.__class__ is cparray else np
-        grad0 = gd0 * xp.add(1, yd0 * yd0, dtype=yd0.dtype)
+        grad0 = gd0 * (1 + yd0 * yd0)
         return grad0
 
 
@@ -143,8 +141,7 @@ class Tanh(Function):
     def backward(ctx, *grad_outputs):
         gd0, = grad_outputs
         yd0, = ctx.saved_tensors
-        xp = cp if gd0.__class__ is cparray else np
-        grad0 = gd0 * xp.subtract(1, yd0 * yd0, dtype=yd0.dtype)
+        grad0 = gd0 * (1 - yd0 * yd0)
         return grad0
 
 
@@ -165,10 +162,10 @@ class Sigmoid(Function):
         requires_grad = xt0.requires_grad
         if params['inplace']:
             inplace_precheck(xt0)
-            xp.exp(-xp.logaddexp(zero, -xd0, out=xd0), out=xd0)
+            xp.exp(-xp.logaddexp(0, -xd0, out=xd0), out=xd0)
             yt0 = inplace_update(xt0, requires_grad, ctx)
         else:
-            yt0 = tt.tensor(xp.exp(-xp.logaddexp(zero, -xd0)), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx)
+            yt0 = tt.tensor(xp.exp(-xp.logaddexp(0, -xd0)), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx)
         ctx.save_for_backward(yt0)
         return yt0
 
@@ -176,7 +173,7 @@ class Sigmoid(Function):
     def backward(ctx, *grad_outputs):
         gd0, = grad_outputs
         yd0, = ctx.saved_tensors
-        grad0 = gd0 * yd0 * (one - yd0)
+        grad0 = gd0 * yd0 * (1 - yd0)
         return grad0
 
 

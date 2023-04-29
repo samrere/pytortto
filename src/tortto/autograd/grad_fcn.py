@@ -1,4 +1,4 @@
-from tortto import np, cp, nparray, cparray, cupy_is_loaded, _int_zero
+from tortto import np, cp, nparray, cparray, cupy_is_loaded
 from .function import *
 from .helper import *
 
@@ -337,9 +337,8 @@ class Split(Function): # keep input _version: True
         dim = ctx.params['dim']
         grad0=xp.concatenate(
             [
-                xp.zeros(output_shapes[i], dtype=xt0.dtype)
-                if gd is tt._int_zero
-                else gd for i, gd in enumerate(grad_outputs)
+                xp.zeros(output_shapes[i], dtype=xt0.dtype) if gdn is None else gdn
+                for i, gdn in enumerate(grad_outputs)
             ],
             axis=dim
         )

@@ -1,5 +1,23 @@
-import numpy as np
+import os
+import sys
+import warnings
 
+with warnings.catch_warnings():
+    warnings.filterwarnings("ignore", message="The NumPy module was reloaded")
+    if 'numpy' in sys.modules:
+        del sys.modules['numpy']
+
+    # https://numpy.org/neps/nep-0050-scalar-promotion.html
+    os.environ['NPY_PROMOTION_STATE'] = 'weak'
+    import numpy as np # reload numpy with NPY_PROMOTION_STATE='weak'
+
+# np._set_promotion_state('weak') # not safe
+assert np._get_promotion_state() == 'weak', "numpy import error"
+
+
+major, minor = np.__version__.split('.')[:2]
+if int(major)<2 and int(minor)<24:
+    raise ImportError(f'NumPy version is too low, requires 1.24 or above')
 
 np.set_printoptions(precision=4)
 class nparray(np.ndarray):

@@ -7,7 +7,6 @@ os.environ['CUPY_ACCELERATORS']='cub'
 """
 # environ parameters
 import os
-
 fft_conv = True if os.environ.get("FFT") == 'True' or os.environ.get("fft") == 'True' else False
 
 from .xparray import *
@@ -19,21 +18,16 @@ __version__ = '1.3.0'
 # also imported by adam: if p.grad is not _int_zero --> p has gradient
 # notice if gradient is 0D numpy array then gradient update: _int_zero += np.array(3, dtype=np.float32) will be float32,
 # so set _int_zero to int8
-_int_zero = np.int8(0)
+# _int_zero = np.int8(0)
 
-# same reason as above, initialize some numbers with the lowest possible precision.
-zero = np.uint8(0)
-one = np.uint8(1)
-two = np.uint8(2)
-half = np.float16(0.5)
-neg_100 = np.float16(-100)
-e_12 = np.float32(1e12)
 
 from .tensor import *
 from .VariableFunctions import *
 from .serialization import *
 from . import nn
-from . import optim
+
+# from . import optim
+
 from .autograd.helper import *
 from .autograd.grad_fcn import *
 from .autograd.grad_ufunc import *

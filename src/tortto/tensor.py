@@ -478,7 +478,7 @@ class Tensor:
         elif isinstance(gradient, Tensor):
             if gradient.device!=self.device:
                 raise RuntimeError(f"invalid gradient at index 0 - expected device {self.device} but got {gradient.device}")
-            gradient = gradient.data
+            gradient = gradient.data.copy()
         if self.data.shape != gradient.shape:
             raise RuntimeError(f"grad can be implicitly created only for scalar outputs")
         self.grad_fn.grad[self._output_idx] = gradient
@@ -487,7 +487,10 @@ class Tensor:
             for i in range(len(grad_fn.next_functions)):
                 if gradient[i] is not None:
                     fn, ind = grad_fn.next_functions[i]
-                    fn.grad[ind]+=gradient[i]
+                    if fn.grad[ind] is None:
+                        fn.grad[ind]=gradient[i]
+                    else:
+                        fn.grad[ind]+=gradient[i]
             grad_fn.clear()
 
 
