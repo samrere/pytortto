@@ -73,10 +73,9 @@ class Mm(Function):
         if x0_true_shape[-1] != x1_true_shape[-2]:
             raise ValueError(f'Dimension mismatch: input0 has a shape of {xd0.shape} and '
                              f'input1 has a shape of {xd1.shape}')
-        yt0 = tt.tensor(xp.matmul(xd0, xd1), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn = ctx)
+        yt0 = tt.tensor(xp.matmul(xd0,xd1), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn = ctx)
         ctx.save_for_backward(xt0, xt1)
         return yt0
-
     @staticmethod
     def backward(ctx, *grad_outputs):
         gd0, = grad_outputs
