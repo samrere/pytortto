@@ -379,11 +379,11 @@ class NllLoss(Function): # input has ndim > 1
         reduction = ctx.params['reduction']
         ignore_index = ctx.params['ignore_index']
         criteria = ctx.params['criteria']
-        xd0, xd1, weight = ctx.saved_tensors
+        xd0, xd1, w = ctx.saved_tensors
         xp = cp if gd0.__class__ is cparray else np
         # weight
-        if weight is not None:
-            w = weight[xd1]
+        if w is not None:
+            w = w[xd1]
             if ignore_index >= 0:
                 w *= xd1 != ignore_index
         else:
@@ -392,7 +392,7 @@ class NllLoss(Function): # input has ndim > 1
         if reduction == 'mean':
             gd0/=ctx.params['N']
         grad0 = xp.zeros_like(xd0)
-        grad0[criteria]=-gd0 if weight is None else -gd0*w
+        grad0[criteria]=-gd0 if w is None else -gd0*w
         return grad0
 
 def nll_loss(input, target, weight=None, ignore_index=-100, reduction='mean'):
@@ -447,6 +447,7 @@ def log_softmax(input, dim):
     return LogSoftmax.apply(input, dim=dim)
 
 class LogSigmoid(Function):
+    # different from pytorch. this function saves both xt0 and yt0, whereas pytorch only saves xt0
     @staticmethod
     def forward(ctx, *inputs, **params):
         xt0, = inputs
@@ -454,19 +455,21 @@ class LogSigmoid(Function):
         requires_grad = xt0.requires_grad
         xp = cp if xd0.__class__ is cparray else np
         yt0 = tt.tensor(-xp.logaddexp(0,-xd0), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx)
-        ctx.save_for_backward(xt0,)
+        ctx.save_for_backward(xt0)
         return yt0
     @staticmethod
     def backward(ctx, *grad_outputs):
         gd0, = grad_outputs
         xd0,= ctx.saved_tensors
         xp = cp if gd0.__class__ is cparray else np
-        grad0 = gd0 * xp.exp(-xd0 + -xp.logaddexp(0,-xd0))
+        grad0 = gd0 * xp.exp(-xp.logaddexp(0,xd0))
         return grad0
 def logsigmoid(input):
     return LogSigmoid.apply(input)
 
 ######################################################
+
+
 def linear(inpt: Tensor, weight: Tensor, bias=None):
     # https://pytorch.org/docs/stable/generated/torch.nn.Linear.html
     # linear is defined as y=X@A.T+b
@@ -480,21 +483,21 @@ def linear(inpt: Tensor, weight: Tensor, bias=None):
     return output
 
 
-@register_gradients(linear)
-def backward(tensor: Tensor, grad, params):
-    xp = cp if grad.__class__ is cparray else np
-    inputs = tensor.parents
-    x = inputs[0]  # input
-    weight = inputs[1]  # weight
-    bias = inputs[2]  # bias, can be None
-    if x.requires_grad:
-        x.grad += grad @ weight.data
-    if weight.requires_grad:  # weight
-        # TODO: follow up https://github.com/cupy/cupy/issues/6673
-        # not yet working for cupy: weight.grad += xp.einsum('...j,...k->jk', grad, x.data, optimize=True)
-        weight.grad += xp.tensordot(grad, x.data, axes=(np.arange(grad.ndim - 1), np.arange(grad.ndim - 1)))
-    if bias and bias.requires_grad:  # bias
-        bias.grad += grad.sum(tuple(range(grad.ndim - 1)))
+# @register_gradients(linear)
+# def backward(tensor: Tensor, grad, params):
+#     xp = cp if grad.__class__ is cparray else np
+#     inputs = tensor.parents
+#     x = inputs[0]  # input
+#     weight = inputs[1]  # weight
+#     bias = inputs[2]  # bias, can be None
+#     if x.requires_grad:
+#         x.grad += grad @ weight.data
+#     if weight.requires_grad:  # weight
+#         # TODO: follow up https://github.com/cupy/cupy/issues/6673
+#         # not yet working for cupy: weight.grad += xp.einsum('...j,...k->jk', grad, x.data, optimize=True)
+#         weight.grad += xp.tensordot(grad, x.data, axes=(np.arange(grad.ndim - 1), np.arange(grad.ndim - 1)))
+#     if bias and bias.requires_grad:  # bias
+#         bias.grad += grad.sum(tuple(range(grad.ndim - 1)))
 
 
 def pad(inpt, padding, mode='constant', value=0.0):

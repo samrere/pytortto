@@ -96,7 +96,46 @@ class Mm(Function):
         return grad0, grad1
 def matmul(input, other):
     return Mm.apply(input, other)
+################################################################
+class Addmm(Function):
+    @staticmethod
+    def forward(ctx, *inputs, **params):
+        xt0, xt1, xt2 = inputs
+        xd0, xd1, xd2 = xt0.data, xt1.data, xt2.data
+        if xd0.ndim == 0 or xd1.ndim == 0:
+            raise RuntimeError(
+                f'both arguments to matmul need to be at least 1D, but they are {xd0.ndim}D and {xd1.ndim}D')
+        xp = cp if xd0.__class__ is cparray else np
+        requires_grad = xt0.requires_grad | xt1.requires_grad
+        x0_true_shape = (1,) + xd0.shape if xd0.ndim < 2 else xd0.shape
+        x1_true_shape = xd1.shape + (1,) if xd1.ndim < 2 else xd1.shape
+        if x0_true_shape[-1] != x1_true_shape[-2]:
+            raise ValueError(f'Dimension mismatch: input0 has a shape of {xd0.shape} and '
+                             f'input1 has a shape of {xd1.shape}')
+        yt0 = tt.tensor(xp.matmul(xd0, xd1), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn = ctx)
+        ctx.save_for_backward(xt0, xt1)
+        return yt0
 
+    @staticmethod
+    def backward(ctx, *grad_outputs):
+        gd0, = grad_outputs
+        xd0, xd1 = ctx.saved_tensors
+        if ctx.needs_input_grad[0]:
+            if xd1.ndim<2:
+                xd1=xd1[:,None]
+            grad0= reverse_broadcast(gd0 @ xd1.swapaxes(-1, -2), xd0.shape)
+        else:
+            grad0 = None
+        if ctx.needs_input_grad[1]:
+            if xd0.ndim<2:
+                xd0=xd0[None]
+            grad1= reverse_broadcast(xd0.swapaxes(-1, -2) @ gd0, xd1.shape)
+        else:
+            grad1 = None
+        return grad0, grad1
+def addmm(input, mat1, mat2, *, beta=1, alpha=1):
+    return Addmm.apply(input, mat1, mat2, beta=beta, alpha=alpha)
+##################################################################
 
 class Sum(Function):
     @staticmethod
