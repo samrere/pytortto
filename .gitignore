@@ -1,7 +1,7 @@
 *__pycache__*
 *checkpoint*
 *.idea*
-*cifar10_data*
+*data*
 *.zip*
 *references*
 *backup*
@@ -19,3 +19,4 @@
 *.zip
 *.h5
 *.png
+*.npy
