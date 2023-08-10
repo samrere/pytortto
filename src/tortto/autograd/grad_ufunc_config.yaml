@@ -7,10 +7,7 @@ Sqrt:
   save_for_backward: yt0
   params:
   backward: ["gd... / (yd... * 2)"]
-  alias: True
-  long:
-  alias_: True
-  long_:
+
 
 Exp:
   num_inputs: 1
@@ -21,10 +18,7 @@ Exp:
   save_for_backward: yt0
   params:
   backward: ["gd... * yd..."]
-  alias: True
-  long:
-  alias_: True
-  long_:
+
 
 Tan:
   num_inputs: 1
@@ -35,10 +29,7 @@ Tan:
   save_for_backward: yt0
   params:
   backward: ["gd... * (1 + yd... * yd...)"]
-  alias: True
-  long:
-  alias_: True
-  long_:
+
 
 Tanh:
   num_inputs: 1
@@ -49,10 +40,7 @@ Tanh:
   save_for_backward: yt0
   params:
   backward: ["gd... * (1 - yd... * yd...)"]
-  alias: True
-  long:
-  alias_: True
-  long_:
+
 
 Sigmoid:
   num_inputs: 1
@@ -63,10 +51,7 @@ Sigmoid:
   save_for_backward: yt0
   params:
   backward: ["gd... * yd... * (1 - yd...)"]
-  alias: True
-  long:
-  alias_: True
-  long_:
+
 
 Sign:
   num_inputs: 1
@@ -77,10 +62,7 @@ Sign:
   save_for_backward:
   params:
   backward: ["xp.zeros_like(gd...)"]
-  alias: True
-  long:
-  alias_:
-  long_:
+
 
 Neg:
   num_inputs: 1
@@ -91,10 +73,7 @@ Neg:
   save_for_backward:
   params:
   backward: ["-gd..."]
-  alias: True
-  long: negative
-  alias_: True
-  long_: negative_
+
 
 Add:
   num_inputs: 2
@@ -105,10 +84,7 @@ Add:
   save_for_backward:
   params: shape
   backward: ["reverse_broadcast(gd0, xd..._shape)"]
-  alias: True
-  long:
-  alias_:
-  long_:
+
 
 Sub:
   num_inputs: 2
@@ -119,10 +95,7 @@ Sub:
   save_for_backward:
   params: shape
   backward: ["reverse_broadcast(gd0, xd..._shape)", "-reverse_broadcast(gd0, xd..._shape)"]
-  alias: True
-  long: subtract
-  alias_:
-  long_:
+
 
 Sin:
   num_inputs: 1
@@ -133,10 +106,7 @@ Sin:
   save_for_backward: xt0
   params:
   backward: ["gd... * xp.cos(xd...)"]
-  alias: True
-  long:
-  alias_: True
-  long_:
+
 
 Cos:
   num_inputs: 1
@@ -147,10 +117,7 @@ Cos:
   save_for_backward: xt0
   params:
   backward: ["-gd... * xp.sin(xd...)"]
-  alias: True
-  long:
-  alias_: True
-  long_:
+
 
 Log:
   num_inputs: 1
@@ -161,10 +128,7 @@ Log:
   save_for_backward: xt0
   params:
   backward: ["gd... / xd..."]
-  alias: True
-  long:
-  alias_: True
-  long_:
+
 
 Abs:
   num_inputs: 1
@@ -175,10 +139,7 @@ Abs:
   save_for_backward: xt0
   params:
   backward: ["gd... * xp.sign(xd...)"]
-  alias: True
-  long: absolute
-  alias_: True
-  long_:
+
 
 Pow:
   num_inputs: 2
@@ -189,7 +150,3 @@ Pow:
   save_for_backward: xt0, xt1, yt0
   params: shape
   backward: ["reverse_broadcast(gd0 * xd/// * yd... / xd..., xd..._shape)", "reverse_broadcast(gd0 * xp.log(xd...) * yd..., xd///_shape)"]
-  alias: True
-  long:
-  alias_:
-  long_:

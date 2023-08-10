@@ -1,5 +1,4 @@
 from tortto import *
-from tortto import _int_zero
 from . import _functional as F
 from .optimizer import Optimizer
 
@@ -41,7 +40,7 @@ class AdamW(Optimizer):
             beta1, beta2 = group['betas']
 
             for p in group['params']:
-                if p.grad is not _int_zero:
+                if p.grad is not None:
                     params_with_grad.append(p)
                     grads.append(p.grad)
 

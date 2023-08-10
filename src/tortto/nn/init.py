@@ -3,13 +3,15 @@ import math
 from .parameter import *
 
 def _no_grad_uniform_(tensor, a, b):
-    xp = cp if tensor.data.__class__ is cparray else np
-    tensor.data = xp.random.uniform(low=a, high=b, size=tensor.shape).astype(tensor.dtype)
+    xd0=tensor.data
+    xp = cp if xd0.__class__ is cparray else np
+    xd0[...] = xp.random.uniform(low=a, high=b, size=xd0.shape).astype(xd0.dtype)
     return tensor
 
 def _no_grad_normal_(tensor, mean, std):
-    xp = cp if tensor.data.__class__ is cparray else np
-    tensor.data = xp.random.normal(loc=mean, scale=std, size=tensor.shape).astype(tensor.dtype)
+    xd0 = tensor.data
+    xp = cp if xd0.__class__ is cparray else np
+    xd0[...] = xp.random.normal(loc=mean, scale=std, size=xd0.shape).astype(xd0.dtype)
     return tensor
 
 def _no_grad_fill_(tensor, val):
@@ -75,15 +77,15 @@ def calculate_gain(nonlinearity, param=None):
     else:
         raise ValueError("Unsupported nonlinearity {}".format(nonlinearity))
 
-
+def uniform_(tensor, a = 0, b = 1):
+    return _no_grad_uniform_(tensor, a, b)
 def kaiming_uniform_(tensor, a=0, mode='fan_in', nonlinearity='leaky_relu'):
     xp = cp if tensor.data.__class__ is cparray else np
     fan = _calculate_correct_fan(tensor, mode)
     gain = calculate_gain(nonlinearity, a)
     std = gain / math.sqrt(fan)
     bound = math.sqrt(3.0) * std  # Calculate uniform bounds from standard deviation
-    tensor.data = xp.random.uniform(low=-bound, high=bound, size=tensor.shape).astype(tensor.dtype)
-    return tensor
+    return _no_grad_uniform_(tensor, -bound, bound)
 
 def xavier_uniform_(tensor, gain = 1.):
     fan_in, fan_out = _calculate_fan_in_and_fan_out(tensor)

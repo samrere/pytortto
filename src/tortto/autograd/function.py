@@ -1,22 +1,28 @@
 import tortto as tt
-from .grad_mode import *
 from .helper import get_data
 
+scipy_is_loaded = bool(tt.find_spec('scipy'))
+if scipy_is_loaded:
+    import scipy.sparse as sci_sparse
 
+if tt.cupy_is_loaded:
+    import cupyx as cpx
 class FunctionBase(object):
     __slots__ = ['variable','to_save', 'next_functions','prev_function_counts','needs_input_grad','grad','params',
-                 ]
+                 'requires_grad','xp']
     def __init__(self):
         self.variable = None
         self.to_save = None
         self.next_functions = None
         self.prev_function_counts = 0
         self.needs_input_grad = None
+        self.requires_grad=False
         self.grad = None
         self.params = None
+        self.xp=None
 
-    def save_for_backward(self, *tensors):
-        self.to_save = tuple((t, t._version) if t.__class__ is tt.Tensor else None for t in tensors)
+    def save_for_backward(self, *tensors): # inputs can be Tensor, Parameter, or None
+        self.to_save = tuple(None if t is None else (t, t._version) for t in tensors)
 
     @property
     def saved_tensors(self): # output tensor.data
@@ -38,15 +44,21 @@ class BackwardFunction(FunctionBase): # metaclass for all grad_fn
             raise RuntimeError(f'function {self.__class__.__name__} returned an incorrect number of gradients'
                                f' (expected {len(self.needs_input_grad)}, got {len(out)})')
 
-        ## backward assertion, comment it out
+        ######################## backward assertion starts, can be commented out
         for o in out:
-            if o is not None:
-                assert o.__class__ in {tt.cparray, tt.nparray}, f"backward output of {self.__class__.__name__} " \
-                                                                f"is {o.__class__}, not xparray"
-                for g in self.grad:
-                    assert o.dtype.type is g.dtype.type, f"backward dtype error at {self.__class__.__name__}, " \
-                                                     f"input grad is {g.dtype.type.__name__} " \
-                                                     f"whereas output grad is {o.dtype.type.__name__}"
+            if o is None:
+                continue
+            if tt.cupy_is_loaded and o.__class__ is cpx.scipy.sparse._csr.csr_matrix:
+                continue
+            if scipy_is_loaded and o.__class__ is sci_sparse._csr.csr_matrix:
+                continue
+            for g in self.grad:
+                if g is None: # g can be None in Split
+                    continue
+                assert o.dtype.type is g.dtype.type, f"backward dtype error at {self.__class__.__name__}, " \
+                                                 f"input grad is {g.dtype.type.__name__} " \
+                                                 f"whereas output grad is {o.dtype.type.__name__}"
+        ######################## backward assertion ends, can be commented out
         return out
 
 class AccumulateGrad(BackwardFunction):
@@ -55,11 +67,25 @@ class AccumulateGrad(BackwardFunction):
         # shape assertion, comment it out
         assert self.grad[0].shape == self.variable.shape, f"backward shape error. grad shape is {self.grad[0].shape} " \
                                                           f"whereas variable shape is {self.variable.shape}"
-
+        """
+        import numpy as np
+        x=np.lib.stride_tricks.as_strided(1, shape=(4,), strides=[0]) #[1,1,1,1]
+        x1=x[:2]*np.array([1,2]) #[1,2]
+        x2=x[2:] #[1,1]
+        
+        x2+=x1 # should be [2,3]
+        print(x2) # [3,3] in numpy and [2,2] in cupy
+        
+        This is because x2 is not contiguous.
+        Therefore, when self.variable.grad is None, we need to make self.grad[0] contiguous. 
+        Otherwise, further inplace add operation on it would give wrong result
+        """
         if self.variable.grad is None:
-            self.variable.grad = self.grad[0]
+            xp=tt.cp if self.variable.data.__class__ is tt.cparray else tt.np
+            self.variable.grad = xp.ascontiguousarray(self.grad[0])
         else:
-            self.variable.grad+=self.grad[0]
+            self.variable.grad += self.grad[0]
+
 
 class Function(FunctionBase):
     def __init__(self, *args, **kwargs):
@@ -89,9 +115,12 @@ class Function(FunctionBase):
         ## check if output requires grad, as well as inplace precheck
         next_functions = []
         needs_input_grad = []
+        requires_grad=False
         for i in inputs:
-            needs_input_grad.append(i.requires_grad)
-            if i.requires_grad:
+            i_requires_grad = False if i is None else i.requires_grad
+            needs_input_grad.append(i_requires_grad)
+            requires_grad |= i_requires_grad
+            if i_requires_grad:
                 if i.grad_fn is None:
                     # create an AccumulateGrad object and link
                     acc_grad = AccumulateGrad()
@@ -106,7 +135,9 @@ class Function(FunctionBase):
             else:
                 next_functions.append((None,0))
         grad_fn.needs_input_grad = tuple(needs_input_grad)
-        grad_fn.next_functions=tuple(next_functions)
+        grad_fn.next_functions = tuple(next_functions)
+        grad_fn.requires_grad = requires_grad
+        grad_fn.xp = tt.cp if inputs[0].data.__class__ is tt.cparray else tt.np
 
         ## forward
         results = cls.forward(grad_fn, *inputs, **params)
@@ -116,7 +147,7 @@ class Function(FunctionBase):
             is_tensor=True
             results = (results,)
 
-        ## forward assertion, comment it out
+        ######################## forward assertion starts, can be commented out
         for r in results:
             if params.get('inplace'):
                 if inputs[0].data_ptr()!=r.data_ptr():
@@ -125,17 +156,15 @@ class Function(FunctionBase):
             assert r.data.__class__ in {tt.nparray, tt.cparray}, f'forward output of {cls.__name__} is ' \
                                                                  f'{r.data.__class__}, not xparray'
             for i in inputs:
+                if i is None:
+                    continue
                 assert r.data.dtype.type is i.data.dtype.type, f"forward dtype error at {cls.__name__}, " \
                                                                f"input is {i.data.dtype.type.__name__} whereas " \
                                                                f"output is {r.data.dtype.type.__name__}"
-
+        ######################## forward assertion ends, can be commented out
 
         grad_fn.grad = [None] * len(results)
 
-        if not is_grad_enabled(): # if using tortto.no_grad(), disable requires_grad
-            for r in results:
-                r.requires_grad=False
-                r.grad_fn=None
 
         if is_tensor:
             results = results[0]

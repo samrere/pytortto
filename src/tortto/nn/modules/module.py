@@ -113,12 +113,12 @@ class Module:
                 if param_data.__class__ is cparray:
                     destination[prefix + name] = param_data.get()
                 else:
-                    destination[prefix + name] = param_data
+                    destination[prefix + name] = param_data.view(np.ndarray)
 
         for name, buf in self._buffers.items():
             if buf is not None:
                 buf_data = buf.data
-                destination[prefix + name] = buf_data.get() if buf_data.__class__ is cparray else buf_data
+                destination[prefix + name] = buf_data.get() if buf_data.__class__ is cparray else buf_data.view(np.ndarray)
 
     def state_dict(self, destination=None, prefix=''):
         if destination is None:
@@ -367,7 +367,7 @@ class Module:
             out_param = Parameter(param_applied, param.requires_grad)
             self._parameters[key] = out_param
 
-            if param.grad is not tt._int_zero:
+            if param.grad is not None:
                 with tt.no_grad():
                     # tortto gradient is np/cp array, so need to convert to tensor to apply the function
                     grad_tensor = tt.tensor(param.grad, copy=False)

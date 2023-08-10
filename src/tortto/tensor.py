@@ -1,8 +1,6 @@
 import tortto
 from tortto import np, cp, cparray, nparray, cupy_is_loaded
 from .VariableFunctions import *
-from .autograd.grad_fcn import *
-from .autograd.grad_ufunc import *
 
 int16 = np.int16
 int32 = np.int32
@@ -18,7 +16,9 @@ default_dtype = {int64, float32, complex64, np.bool_}
 
 
 class Tensor:
-    def __init__(self, data, requires_grad=False, dtype=float32, copy=True, **kwargs):
+    def __init__(self, data, requires_grad=False, dtype=None, copy=True, **kwargs):
+        if dtype is None: # all defaults to float32
+            dtype=float32
         if cupy_is_loaded and (data.__class__ is cparray or data.__class__ is cp.ndarray):
             self.data = cparray(data, dtype=dtype, copy=copy)
         else:
@@ -76,7 +76,7 @@ class Tensor:
 
     @property
     def is_leaf(self):
-        return len(self.parents) == 0
+        return self.grad_fn is None
 
     @property
     def ndim(self):
@@ -290,10 +290,9 @@ class Tensor:
     def __setitem__(self, key, value):
         if value.__class__ is not tt.Tensor:
             value = tt.tensor(value, copy=False)
+        if key.__class__ is tt.Tensor:
+            key=key.data
         return CopySlices.apply(self, value, key=key)
-
-
-
 
     def dim(self):
         return self.ndim
@@ -337,14 +336,14 @@ class Tensor:
                 f"can't convert {self.device} device type tensor to numpy. Use Tensor.cpu() to copy the tensor to host memory first.")
         if self.requires_grad:
             raise RuntimeError("Can't call numpy() on Tensor that requires grad. Use tensor.detach().numpy() instead.")
-        return data.type(np.ndarray)
+        return data
 
     def contiguous(self):
         """
         different from pytorch: tortto `contiguous` does it inplace.
         """
         xp = cp if self.data.__class__ is cparray else np
-        self.data = xp.ascontiguousarray(self.data)
+        self.data[...] = xp.ascontiguousarray(self.data)
         return self
 
     def is_contiguous(self):
@@ -465,33 +464,63 @@ class Tensor:
     def type(self, dtype):
         self.data = self.data.astype(dtype, copy=False)
         return self
+    # no need for inplace check, as it calls __setitem__
+    def normal_(self, mean=0, std=1):
+        xp = cp if self.data.__class__ is cparray else np
+        self[...]=xp.random.normal(loc=mean, scale=std, size=self.shape)
+
+    def uniform_(self, low=0, high=1):
+        xp=cp if self.data.__class__ is cparray else np
+        self[...]=xp.random.uniform(low=low, high=high, size=self.shape)
+    def fill_(self,value):
+        self[...] = value
 
     def backward(self, gradient=None):
-        if not self.requires_grad and not self.grad_fn:
+        if not self.requires_grad:
+            assert self.grad_fn is None, 'bug!'
             raise RuntimeError('element 0 of tensors does not require grad and does not have a grad_fn')
+
+        xd=self.data
+        xp = cp if xd.__class__ is cparray else np
         if gradient is None:
-            if self.data.__class__ is cparray:
-                gradient = cp.expand_dims(cparray(1, dtype=self.dtype), axis=tuple(range(self.ndim)))
-            else:
-                gradient = np.expand_dims(nparray(1, dtype=self.dtype), axis=tuple(range(self.ndim)))
+            gradient = xp.expand_dims(xp.array(1, dtype=xd.dtype), axis=tuple(range(xd.ndim)))
 
         elif isinstance(gradient, Tensor):
             if gradient.device!=self.device:
                 raise RuntimeError(f"invalid gradient at index 0 - expected device {self.device} but got {gradient.device}")
-            gradient = gradient.data.copy()
+            # use this line to copy the input tensor data.
+            gradient = gradient.data.copy().view(xp.ndarray)
+
         if self.data.shape != gradient.shape:
             raise RuntimeError(f"grad can be implicitly created only for scalar outputs")
-        self.grad_fn.grad[self._output_idx] = gradient
-        for grad_fn in toposort(self.grad_fn):
-            gradient = grad_fn.apply(*grad_fn.grad)
-            for i in range(len(grad_fn.next_functions)):
-                if gradient[i] is not None:
-                    fn, ind = grad_fn.next_functions[i]
-                    if fn.grad[ind] is None:
-                        fn.grad[ind]=gradient[i]
-                    else:
-                        fn.grad[ind]+=gradient[i]
-            grad_fn.clear()
+
+
+        if self.grad_fn:
+            self.grad_fn.grad[self._output_idx] = gradient
+            for grad_fn in toposort(self.grad_fn):
+                gradient = grad_fn.apply(*grad_fn.grad)
+                for i in range(len(grad_fn.next_functions)):
+                    grad = gradient[i]
+                    if grad is not None:
+                        fn, ind = grad_fn.next_functions[i]
+                        if fn.grad[ind] is None:
+                            fn.grad[ind] = grad_fn.xp.ascontiguousarray(grad)
+                        else:
+                            fn.grad[ind] += grad
+                grad_fn.clear()
+        else:
+            """
+            import tortto as tt
+            x=tt.tensor([1,2,3.], requires_grad=True)
+            y=3*x
+            y.backward(y)
+            x.backward(x) # backprop from a tensor that requires_grad=True but grad_fn=None
+            print(x.grad)
+            """
+            acc_grad = AccumulateGrad()
+            acc_grad.variable = self
+            acc_grad.grad=(gradient,)
+            acc_grad.apply(*acc_grad.grad)
 
 
 
@@ -499,12 +528,4 @@ class Tensor:
 
 
 
-    # no need for inplace check, as it calls __setitem__
-    def normal_(self):
-        self[...]=...
 
-
-    def uniform_(self):
-        self[...]=...
-    def fill_(self):
-        self[...]=...

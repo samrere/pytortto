@@ -44,17 +44,16 @@ special = """class Mul(Function):
     def forward(ctx, *inputs, **params):
         xt0, xt1 = inputs
         xd0, xd1 = xt0.data, xt1.data
-        xp = cp if xd0.__class__ is cparray else np
-        requires_grad = xt0.requires_grad | xt1.requires_grad
+        xp = ctx.xp
         if params['inplace']:
             inplace_precheck(xt0)
             if xt1.requires_grad:
-                params['copy'] = xd0.copy()
+                ctx.params['copy'] = xd0.copy()
             xp.multiply(xd0, xd1, out=xd0)
-            yt0 = inplace_update(xt0, requires_grad, ctx)
+            yt0 = inplace_update(xt0, ctx)
             ctx.save_for_backward(None, xt1)
         else:
-            yt0 = tt.tensor(xp.multiply(xd0, xd1), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx)
+            yt0 = build_links(xp.multiply(xd0, xd1), grad_fn=ctx)
             ctx.save_for_backward(xt0, xt1)
         ctx.params['shape'] = (xd0.shape, xd1.shape)
         return yt0
@@ -63,21 +62,15 @@ special = """class Mul(Function):
     def backward(ctx, *grad_outputs):
         gd0, = grad_outputs
         xd0_shape, xd1_shape = ctx.params['shape']
+        xd0, xd1 = ctx.saved_tensors
+        if xd0 is None:
+            xd0 = ctx.params['copy']
         grad0, grad1 = None, None
         if ctx.needs_input_grad[0]:
-            xd1 = get_data(ctx.to_save[1])
             grad0 = reverse_broadcast(gd0 * xd1, xd0_shape)
         if ctx.needs_input_grad[1]:
-            xd0 = ctx.params['copy'] if ctx.to_save[0] is None else get_data(ctx.to_save[0])
             grad1 = reverse_broadcast(gd0 * xd0, xd1_shape)
         return grad0, grad1
-
-
-def mul(input, other):
-    return Mul.apply(input, other, inplace=False)
-
-
-multiply = mul
 
 
 class Div(Function):
@@ -85,17 +78,16 @@ class Div(Function):
     def forward(ctx, *inputs, **params):
         xt0, xt1 = inputs
         xd0, xd1 = xt0.data, xt1.data
-        xp = cp if xd0.__class__ is cparray else np
-        requires_grad = xt0.requires_grad | xt1.requires_grad
+        xp = ctx.xp
         if params['inplace']:
             inplace_precheck(xt0)
             if xt1.requires_grad:
-                params['copy'] = xd0.copy()
+                ctx.params['copy'] = xd0.copy()
             xp.divide(xd0, xd1, out=xd0)
-            yt0 = inplace_update(xt0, requires_grad, ctx)
+            yt0 = inplace_update(xt0, ctx)
             ctx.save_for_backward(None, xt1)
         else:
-            yt0 = tt.tensor(xp.divide(xd0, xd1), requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx)
+            yt0 = build_links(xp.divide(xd0, xd1), grad_fn=ctx)
             ctx.save_for_backward(xt0, xt1)
         ctx.params['shape'] = (xd0.shape, xd1.shape)
         return yt0
@@ -104,21 +96,15 @@ class Div(Function):
     def backward(ctx, *grad_outputs):
         gd0, = grad_outputs
         xd0_shape, xd1_shape = ctx.params['shape']
-        xd1 = get_data(ctx.to_save[1])
+        xd0, xd1 = ctx.saved_tensors
+        if xd0 is None:
+            xd0 = ctx.params['copy']
         grad0, grad1 = None, None
         if ctx.needs_input_grad[0]:
             grad0 = reverse_broadcast(gd0 / xd1, xd0_shape)
         if ctx.needs_input_grad[1]:
-            xd0 = ctx.params['copy'] if ctx.to_save[0] is None else get_data(ctx.to_save[0])
             grad1 = reverse_broadcast(-gd0 * xd0 / (xd1 * xd1), xd1_shape)
         return grad0, grad1
-
-
-def div(input, other):
-    return Div.apply(input, other, inplace=False)
-
-
-divide = div
 """
 
 
@@ -127,7 +113,7 @@ def generate_grad_ufunc():
         return
     with open(rf'{Path(__file__).parent}/grad_ufunc_config.yaml') as file:
         yml = yaml.load(file, Loader=yaml.FullLoader)
-        c('from tortto import np, cp, cparray\nfrom .function import *\nfrom .helper import *')
+        c('from .function import *\nfrom .helper import *')
         newline(2)
         c('"""')
         c("'x' is input\n'y' is output\n'g' is gradient")
@@ -173,25 +159,24 @@ def generate_grad_ufunc():
                     c(f"{inputs} = inputs")
                     c(f"{', '.join(f'xd{i}' for i in range(num_inputs))} = {', '.join(f'xt{i}.data' for i in range(num_inputs))}")
                     if forward_outplace.find('xp.') != -1:
-                        c("xp = cp if xd0.__class__ is cparray else np")
-                    c(f"requires_grad = {' | '.join(f'xt{i}.requires_grad' for i in range(num_inputs))}")
+                        c("xp = ctx.xp")
                     if allow_inplace:  # only single output if inplace
                         with indent(f"if params['inplace']:"):
                             c('inplace_precheck(xt0)')
                             if copy_xt0:
-                                with indent('if requires_grad:'):
-                                    c("params['copy'] = xd0.copy()")
+                                with indent('if ctx.requires_grad:'):
+                                    c("ctx.params['copy'] = xd0.copy()")
                             c(f"{forward_inplace.replace('...', 'xd0').replace('///', 'xd1')}")
-                            c('yt0 = inplace_update(xt0, requires_grad, ctx)')
+                            c('yt0 = inplace_update(xt0, ctx)')
 
                             if copy_xt0:
                                 c(f"ctx.save_for_backward({save_for_backward})")
                         with indent('else:'):
-                            c(f"yt0 = tt.tensor({forward_outplace.replace('...', 'xd0').replace('///', 'xd1')}, requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx)")
+                            c(f"yt0 = build_links({forward_outplace.replace('...', 'xd0').replace('///', 'xd1')}, grad_fn=ctx)")
                             if copy_xt0:
                                 c(f"ctx.save_for_backward({save_for_backward_original})")
                     else:
-                        c(f"yt0 = tt.tensor({forward_outplace.replace('...', 'xd0').replace('///', 'xd1')}, requires_grad=requires_grad, copy=False, _output_idx=0, grad_fn=ctx)")
+                        c(f"yt0 = build_links({forward_outplace.replace('...', 'xd0').replace('///', 'xd1')}, grad_fn=ctx)")
                     if save_for_backward is not None and copy_xt0 is False:
                         c(f"ctx.save_for_backward({save_for_backward})")
                     if params:
@@ -218,7 +203,7 @@ def generate_grad_ufunc():
                     infer = True
                     for b in backward:
                         if b.find('xp.') != -1:
-                            c("xp = cp if gd0.__class__ is cparray else np")
+                            c("xp = ctx.xp")
                         if b.find('///') != -1:
                             infer = False
                     if num_inputs == 1:
@@ -232,31 +217,8 @@ def generate_grad_ufunc():
                             for i in range(num_inputs):
                                 c(f"grad{i} = {backward[i].replace('...', '0').replace('///', '1')} if ctx.needs_input_grad[{i}] else None")
                     c(f"return {', '.join(f'grad{i}' for i in range(num_inputs))}")
-            if config['alias']:
-                newline(2)
-                if num_inputs == 1:
-                    with indent(f"def {name.lower()}(input):"):
-                        c(f"return {name}.apply(input{', inplace=False' if allow_inplace else ''})")
-                elif num_inputs == 2:
-                    with indent(f"def {name.lower()}(input, other):"):
-                        c(f"return {name}.apply(input, other{', inplace=False' if allow_inplace else ''})")
-            if config['long']:
-                newline(2)
-                c(f"{config['long']} = {name.lower()}")
-            if config['alias_']:
-                newline(2)
-                if num_inputs == 1:
-                    with indent(f"def {name.lower()}_(input):"):
-                        c(f"return {name}.apply(input{', inplace=True' if allow_inplace else ''})")
-                elif num_inputs == 2:
-                    with indent(f"def {name.lower()}_(input, other):"):
-                        c(f"return {name}.apply(input, other{', inplace=True' if allow_inplace else ''})")
-            if config['long_']:
-                newline(2)
-                c(f"{config['long_']} = {name.lower()}")
             newline(2)
 
         to_save[0] += special
-        newline()
 
         finished('grad_ufunc.py')

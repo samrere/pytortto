@@ -4,11 +4,11 @@ import warnings
 
 with warnings.catch_warnings():
     warnings.filterwarnings("ignore", message="The NumPy module was reloaded")
-    if 'numpy' in sys.modules:
-        del sys.modules['numpy']
 
     # https://numpy.org/neps/nep-0050-scalar-promotion.html
     os.environ['NPY_PROMOTION_STATE'] = 'weak'
+    if 'numpy' in sys.modules:
+        del sys.modules['numpy']
     import numpy as np # reload numpy with NPY_PROMOTION_STATE='weak'
 
 assert np._get_promotion_state() == 'weak', "numpy import error"
@@ -28,8 +28,9 @@ class nparray(np.ndarray):
         return obj
     def __array_finalize__(self, obj):
         if obj is None: return
-        if self.base.__class__ is nparray: # it's a view of nparray
-            self._version = obj._version
+        base = self.base
+        if base is not None and base.base is not None:  # it's a view of nparray
+            self._version = getattr(obj, '_version', [0])
         else:
             self._version = [0]
 
@@ -39,6 +40,7 @@ from importlib.util import find_spec
 cparray = None
 cupy_is_loaded = bool(find_spec('cupy'))
 cp = None
+
 if cupy_is_loaded:
     # os.environ['CUPY_ACCELERATORS'] = 'cub'
     import cupy as cp
@@ -64,8 +66,10 @@ if cupy_is_loaded:
             else:
                 self._version = [0]
 
-
     cp.set_printoptions(precision=4)
+
+
+
 if __name__ == '__main__':
     # keep version when operation is a view
     x=nparray([[1,2,3],[4,5,6]])

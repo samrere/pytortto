@@ -2,7 +2,6 @@ from collections import defaultdict
 import collections.abc
 
 from tortto import *
-from tortto import _int_zero
 from itertools import chain
 
 class _RequiredParameter(object):
@@ -141,7 +140,7 @@ class Optimizer(object):
     def zero_grad(self):
         for group in self.param_groups:
             for p in group['params']:
-                p.grad = _int_zero
+                p.grad = None
 
     def step(self):
         raise NotImplementedError
