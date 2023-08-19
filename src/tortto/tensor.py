@@ -49,6 +49,9 @@ class Tensor:
                 raise RuntimeError('only Tensors of floating point and complex dtype can require gradients')
         self._requires_grad = val
 
+    def requires_grad_(self, val=True):
+        self.requires_grad=val
+
     @property
     def T(self):
         if self.ndim!=2:
@@ -474,6 +477,12 @@ class Tensor:
         self[...]=xp.random.uniform(low=low, high=high, size=self.shape)
     def fill_(self,value):
         self[...] = value
+
+    def clamp(self, min=None, max=None):
+        return clamp(self, min=min, max=max)
+
+    def clamp_(self):
+        return clamp_(self, min=min, max=max)
 
     def backward(self, gradient=None):
         if not self.requires_grad:

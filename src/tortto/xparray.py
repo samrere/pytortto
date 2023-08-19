@@ -18,7 +18,7 @@ major, minor = np.__version__.split('.')[:2]
 if int(major)<2 and int(minor)<24:
     raise ImportError(f'NumPy version is too low, requires 1.24 or above')
 
-np.set_printoptions(precision=4)
+np.set_printoptions(formatter={'float': '{: 0.4f}'.format})
 class nparray(np.ndarray):
     def __new__(cls, input_array, *args, **kwargs):
         if input_array.__class__ is cls:
@@ -45,6 +45,8 @@ if cupy_is_loaded:
     # os.environ['CUPY_ACCELERATORS'] = 'cub'
     import cupy as cp
 
+    cp.set_printoptions(formatter={'float': '{: 0.4f}'.format})
+
     if int(cp.__version__.split('.')[0]) < 10:  # cupy major version lower than 10
         import subprocess
         pip_list = subprocess.Popen(('pip', 'list'), stdout=subprocess.PIPE)
@@ -66,7 +68,6 @@ if cupy_is_loaded:
             else:
                 self._version = [0]
 
-    cp.set_printoptions(precision=4)
 
 
 

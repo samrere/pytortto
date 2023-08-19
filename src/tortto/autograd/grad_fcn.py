@@ -627,3 +627,35 @@ class Copy(Function): # keep input _version: True (it's inplace)
             grad0 = gd0
             grad0[...] = 0
         return grad0, grad1 # no grad for input
+
+class Clamp(Function):
+    @staticmethod
+    def forward(ctx, *inputs, **params):
+        xt0, = inputs
+        xd0 = xt0.data
+        xp = ctx.xp
+        if params['inplace']:
+            inplace_precheck(xt0)
+            if ctx.requires_grad:
+                ctx.params['copy'] = xd0.copy()
+            xp.clip(xd0, a_min=params['min'],a_max=params['max'],out=xd0)
+            yt0 = inplace_update(xt0, ctx)
+            ctx.save_for_backward(None)
+        else:
+            yt0 = build_links(xp.clip(xd0, a_min=params['min'],a_max=params['max']), grad_fn=ctx)
+            ctx.save_for_backward(xt0)
+        return yt0
+
+    @staticmethod
+    def backward(ctx, *grad_outputs):
+        gd0, = grad_outputs
+        xd0, = ctx.saved_tensors
+        if xd0 is None:
+            xd0 = ctx.params['copy']
+        lim_min=ctx.params['min']
+        lim_max=ctx.params['max']
+        if lim_min is not None:
+            gd0[xd0<lim_min]=0
+        if lim_max is not None:
+            gd0[xd0>lim_max]=0
+        return gd0

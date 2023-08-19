@@ -363,6 +363,11 @@ def masked_fill_(input, mask, value):
         value=tt.tensor(value, copy=False)
     return MaskedFill.apply(input, value, mask=mask, inplace=True)
 
+def clamp(input, min=None, max=None):
+    return Clamp.apply(input, min=min, max=max, inplace=False)
+
+def clamp_(input, min=None, max=None):
+    return Clamp.apply(input, min=min, max=max, inplace=True)
 
 
 

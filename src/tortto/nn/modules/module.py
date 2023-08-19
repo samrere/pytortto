@@ -338,6 +338,11 @@ class Module:
     def eval(self):
         return self.train(False)
 
+    def requires_grad_(self, requires_grad=True):
+        for p in self.parameters():
+            p.requires_grad_(requires_grad)
+        return self
+
     def apply(self, fn):
         for module in self.children():
             module.apply(fn)
