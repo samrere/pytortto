@@ -6,7 +6,7 @@ Sqrt:
   forward_outplace: xp.sqrt(...)
   save_for_backward: yt0
   params:
-  backward: ["gd... / (yd... * 2)"]
+  backward: ["gd0 / (yd0 * 2)"]
 
 
 Exp:
@@ -17,7 +17,7 @@ Exp:
   forward_outplace: xp.exp(...)
   save_for_backward: yt0
   params:
-  backward: ["gd... * yd..."]
+  backward: ["gd0 * yd0"]
 
 
 Tan:
@@ -28,7 +28,7 @@ Tan:
   forward_outplace: xp.tan(...)
   save_for_backward: yt0
   params:
-  backward: ["gd... * (1 + yd... * yd...)"]
+  backward: ["gd0 * (1 + yd0 * yd0)"]
 
 
 Tanh:
@@ -39,7 +39,7 @@ Tanh:
   forward_outplace: xp.tanh(...)
   save_for_backward: yt0
   params:
-  backward: ["gd... * (1 - yd... * yd...)"]
+  backward: ["gd0 * (1 - yd0 * yd0)"]
 
 
 Sigmoid:
@@ -50,7 +50,7 @@ Sigmoid:
   forward_outplace: xp.exp(-xp.logaddexp(0, -...))
   save_for_backward: yt0
   params:
-  backward: ["gd... * yd... * (1 - yd...)"]
+  backward: ["gd0 * yd0 * (1 - yd0)"]
 
 
 Sign:
@@ -61,7 +61,7 @@ Sign:
   forward_outplace: xp.sign(...)
   save_for_backward:
   params:
-  backward: ["xp.zeros_like(gd...)"]
+  backward: ["xp.zeros_like(gd0)"]
 
 
 Neg:
@@ -72,7 +72,7 @@ Neg:
   forward_outplace: xp.negative(...)
   save_for_backward:
   params:
-  backward: ["-gd..."]
+  backward: ["-gd0"]
 
 
 Add:
@@ -83,7 +83,7 @@ Add:
   forward_outplace: xp.add(..., ///)
   save_for_backward:
   params: shape
-  backward: ["reverse_broadcast(gd0, xd..._shape)"]
+  backward: ["reverse_broadcast(gd0, x0_shape)"]
 
 
 Sub:
@@ -94,7 +94,7 @@ Sub:
   forward_outplace: xp.subtract(..., ///)
   save_for_backward:
   params: shape
-  backward: ["reverse_broadcast(gd0, xd..._shape)", "-reverse_broadcast(gd0, xd..._shape)"]
+  backward: ["reverse_broadcast(gd0, x0_shape)", "-reverse_broadcast(gd0, x1_shape)"]
 
 
 Sin:
@@ -105,7 +105,7 @@ Sin:
   forward_outplace: xp.sin(...)
   save_for_backward: xt0
   params:
-  backward: ["gd... * xp.cos(xd...)"]
+  backward: ["gd0 * xp.cos(xd0)"]
 
 
 Cos:
@@ -116,7 +116,7 @@ Cos:
   forward_outplace: xp.cos(...)
   save_for_backward: xt0
   params:
-  backward: ["-gd... * xp.sin(xd...)"]
+  backward: ["-gd0 * xp.sin(xd0)"]
 
 
 Log:
@@ -127,7 +127,7 @@ Log:
   forward_outplace: xp.log(...)
   save_for_backward: xt0
   params:
-  backward: ["gd... / xd..."]
+  backward: ["gd0 / xd0"]
 
 
 Abs:
@@ -138,7 +138,7 @@ Abs:
   forward_outplace: xp.abs(...)
   save_for_backward: xt0
   params:
-  backward: ["gd... * xp.sign(xd...)"]
+  backward: ["gd0 * xp.sign(xd0)"]
 
 
 Pow:
@@ -149,4 +149,15 @@ Pow:
   forward_outplace: xp.power(..., ///)
   save_for_backward: xt0, xt1, yt0
   params: shape
-  backward: ["reverse_broadcast(gd0 * xd/// * yd... / xd..., xd..._shape)", "reverse_broadcast(gd0 * xp.log(xd...) * yd..., xd///_shape)"]
+  backward: ["reverse_broadcast(gd0 * xd1 * yd0 / xd0, x0_shape)", "reverse_broadcast(gd0 * xp.log(xd0) * yd0, x1_shape)"]
+
+#Mul:
+#  num_inputs: 2
+#  num_outputs: 1
+#  allow_inplace: True
+#  forward_inplace: xp.multiply(xd..., xd///, out=xd...)
+#  selective_copy:
+#  forward_outplace: xp.multiply(xd..., xd///)
+#  save_for_backward: xt0, xt1
+#  params: shape
+#  backward: ["reverse_broadcast(gd0 * xd1, xd0_shape)", "reverse_broadcast(gd0 * xd0, xd1_shape)"]

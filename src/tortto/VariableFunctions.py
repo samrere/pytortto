@@ -369,6 +369,8 @@ def clamp(input, min=None, max=None):
 def clamp_(input, min=None, max=None):
     return Clamp.apply(input, min=min, max=max, inplace=True)
 
+def max(input):
+    return Max.apply(input)
 
 
 

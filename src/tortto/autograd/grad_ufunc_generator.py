@@ -63,12 +63,12 @@ special = """class Mul(Function):
         gd0, = grad_outputs
         xd0_shape, xd1_shape = ctx.params['shape']
         xd0, xd1 = ctx.saved_tensors
-        if xd0 is None:
-            xd0 = ctx.params['copy']
         grad0, grad1 = None, None
         if ctx.needs_input_grad[0]:
             grad0 = reverse_broadcast(gd0 * xd1, xd0_shape)
         if ctx.needs_input_grad[1]:
+            if xd0 is None:
+                xd0 = ctx.params['copy']
             grad1 = reverse_broadcast(gd0 * xd0, xd1_shape)
         return grad0, grad1
 
@@ -97,12 +97,12 @@ class Div(Function):
         gd0, = grad_outputs
         xd0_shape, xd1_shape = ctx.params['shape']
         xd0, xd1 = ctx.saved_tensors
-        if xd0 is None:
-            xd0 = ctx.params['copy']
         grad0, grad1 = None, None
         if ctx.needs_input_grad[0]:
             grad0 = reverse_broadcast(gd0 / xd1, xd0_shape)
         if ctx.needs_input_grad[1]:
+            if xd0 is None:
+                xd0 = ctx.params['copy']
             grad1 = reverse_broadcast(-gd0 * xd0 / (xd1 * xd1), xd1_shape)
         return grad0, grad1
 """
@@ -151,6 +151,8 @@ def generate_grad_ufunc():
             backward = config['backward']
             if len(backward) == 1:
                 backward = backward * num_inputs
+
+            # forward
             with indent(f'class {name}(Function):'):
                 with indent('@staticmethod\ndef forward(ctx, *inputs, **params):'):
                     inputs = ', '.join(f'xt{i}' for i in range(num_inputs))
@@ -182,6 +184,9 @@ def generate_grad_ufunc():
                     if params:
                         c(f"ctx.params['{params}'] = ({', '.join(f'xd{i}.{params}' for i in range(num_inputs))})")
                     c(f"return {', '.join(f'yt{i}' for i in range(num_outputs))}")
+
+
+                # backward
                 newline()
                 with indent('@staticmethod\ndef backward(ctx, *grad_outputs):'):
                     grads = ', '.join(f'gd{i}' for i in range(num_outputs))
@@ -189,7 +194,7 @@ def generate_grad_ufunc():
                         grads += ','
                     c(f"{grads} = grad_outputs")
                     if params:
-                        c(f"{', '.join(f'xd{i}_{params}' for i in range(num_inputs))} = ctx.params['{params}']")
+                        c(f"{', '.join(f'x{i}_{params}' for i in range(num_inputs))} = ctx.params['{params}']")
                     if save_for_backward is not None:
                         save_for_backward_original = save_for_backward_original.replace('t', 'd')
                         if len_saved == 1:
@@ -200,22 +205,16 @@ def generate_grad_ufunc():
                     if copy_xt0 is True:
                         with indent("if xd0 is None:"):
                             c("xd0 = ctx.params['copy']")
-                    infer = True
                     for b in backward:
                         if b.find('xp.') != -1:
                             c("xp = ctx.xp")
-                        if b.find('///') != -1:
-                            infer = False
+
                     if num_inputs == 1:
-                        assert len(backward) == 1, 'bug!'
-                        c(f"grad0 = {backward[0].replace('...', '0')}")
+                        assert len(backward) == 1, f'bug! number of input is 1, but number of gradient is {len(backward)}'
+                        c(f"grad0 = {backward[0]}")
                     else:
-                        if infer:
-                            for i in range(num_inputs):
-                                c(f"grad{i} = {backward[i].replace('...', str(i))} if ctx.needs_input_grad[{i}] else None")
-                        else:
-                            for i in range(num_inputs):
-                                c(f"grad{i} = {backward[i].replace('...', '0').replace('///', '1')} if ctx.needs_input_grad[{i}] else None")
+                        for i in range(num_inputs):
+                            c(f"grad{i} = {backward[i]} if ctx.needs_input_grad[{i}] else None")
                     c(f"return {', '.join(f'grad{i}' for i in range(num_inputs))}")
             newline(2)
 

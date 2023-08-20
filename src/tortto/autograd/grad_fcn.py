@@ -659,3 +659,22 @@ class Clamp(Function):
         if lim_max is not None:
             gd0[xd0>lim_max]=0
         return gd0
+
+class Max(Function):
+    @staticmethod
+    def forward(ctx, *inputs, **params):
+        xt0, = inputs
+        xd0 = xt0.data
+        xp = ctx.xp
+        yt0 = build_links(xp.max(xd0), grad_fn=ctx)
+        ctx.save_for_backward(xt0, yt0)
+        return yt0
+
+    @staticmethod
+    def backward(ctx, *grad_outputs):
+        gd0, = grad_outputs
+        xd0, yd0 = ctx.saved_tensors
+        grad0=ctx.xp.zeros_like(xd0)
+        grad0[xd0==yd0]=gd0
+        return grad0
+

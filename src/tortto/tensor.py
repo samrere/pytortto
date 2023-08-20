@@ -484,6 +484,9 @@ class Tensor:
     def clamp_(self):
         return clamp_(self, min=min, max=max)
 
+    def max(self):
+        return max(self)
+
     def backward(self, gradient=None):
         if not self.requires_grad:
             assert self.grad_fn is None, 'bug!'

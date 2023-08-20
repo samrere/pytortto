@@ -195,9 +195,9 @@ class Add(Function):
     @staticmethod
     def backward(ctx, *grad_outputs):
         gd0, = grad_outputs
-        xd0_shape, xd1_shape = ctx.params['shape']
-        grad0 = reverse_broadcast(gd0, xd0_shape) if ctx.needs_input_grad[0] else None
-        grad1 = reverse_broadcast(gd0, xd1_shape) if ctx.needs_input_grad[1] else None
+        x0_shape, x1_shape = ctx.params['shape']
+        grad0 = reverse_broadcast(gd0, x0_shape) if ctx.needs_input_grad[0] else None
+        grad1 = reverse_broadcast(gd0, x0_shape) if ctx.needs_input_grad[1] else None
         return grad0, grad1
 
 
@@ -219,9 +219,9 @@ class Sub(Function):
     @staticmethod
     def backward(ctx, *grad_outputs):
         gd0, = grad_outputs
-        xd0_shape, xd1_shape = ctx.params['shape']
-        grad0 = reverse_broadcast(gd0, xd0_shape) if ctx.needs_input_grad[0] else None
-        grad1 = -reverse_broadcast(gd0, xd1_shape) if ctx.needs_input_grad[1] else None
+        x0_shape, x1_shape = ctx.params['shape']
+        grad0 = reverse_broadcast(gd0, x0_shape) if ctx.needs_input_grad[0] else None
+        grad1 = -reverse_broadcast(gd0, x1_shape) if ctx.needs_input_grad[1] else None
         return grad0, grad1
 
 
@@ -362,13 +362,13 @@ class Pow(Function):
     @staticmethod
     def backward(ctx, *grad_outputs):
         gd0, = grad_outputs
-        xd0_shape, xd1_shape = ctx.params['shape']
+        x0_shape, x1_shape = ctx.params['shape']
         xd0, xd1, yd0 = ctx.saved_tensors
         if xd0 is None:
             xd0 = ctx.params['copy']
         xp = ctx.xp
-        grad0 = reverse_broadcast(gd0 * xd1 * yd0 / xd0, xd0_shape) if ctx.needs_input_grad[0] else None
-        grad1 = reverse_broadcast(gd0 * xp.log(xd0) * yd0, xd1_shape) if ctx.needs_input_grad[1] else None
+        grad0 = reverse_broadcast(gd0 * xd1 * yd0 / xd0, x0_shape) if ctx.needs_input_grad[0] else None
+        grad1 = reverse_broadcast(gd0 * xp.log(xd0) * yd0, x1_shape) if ctx.needs_input_grad[1] else None
         return grad0, grad1
 
 
@@ -396,12 +396,12 @@ class Mul(Function):
         gd0, = grad_outputs
         xd0_shape, xd1_shape = ctx.params['shape']
         xd0, xd1 = ctx.saved_tensors
-        if xd0 is None:
-            xd0 = ctx.params['copy']
         grad0, grad1 = None, None
         if ctx.needs_input_grad[0]:
             grad0 = reverse_broadcast(gd0 * xd1, xd0_shape)
         if ctx.needs_input_grad[1]:
+            if xd0 is None:
+                xd0 = ctx.params['copy']
             grad1 = reverse_broadcast(gd0 * xd0, xd1_shape)
         return grad0, grad1
 
@@ -430,11 +430,11 @@ class Div(Function):
         gd0, = grad_outputs
         xd0_shape, xd1_shape = ctx.params['shape']
         xd0, xd1 = ctx.saved_tensors
-        if xd0 is None:
-            xd0 = ctx.params['copy']
         grad0, grad1 = None, None
         if ctx.needs_input_grad[0]:
             grad0 = reverse_broadcast(gd0 / xd1, xd0_shape)
         if ctx.needs_input_grad[1]:
+            if xd0 is None:
+                xd0 = ctx.params['copy']
             grad1 = reverse_broadcast(-gd0 * xd0 / (xd1 * xd1), xd1_shape)
         return grad0, grad1
