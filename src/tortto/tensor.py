@@ -487,6 +487,9 @@ class Tensor:
     def max(self):
         return max(self)
 
+    def min(self):
+        return min(self)
+
     def backward(self, gradient=None):
         if not self.requires_grad:
             assert self.grad_fn is None, 'bug!'

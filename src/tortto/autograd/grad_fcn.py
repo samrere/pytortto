@@ -4,40 +4,6 @@ from .helper import *
 
 buildin_sum = sum
 
-class Permute(Function): # keep input _version: True
-    @staticmethod
-    def forward(ctx, *inputs, **params):
-        xt0, = inputs
-        xd0 = xt0.data
-        xp = ctx.xp
-        yt0 = build_links(xp.transpose(xd0, params['dims']), grad_fn=ctx)
-        return yt0
-    @staticmethod
-    def backward(ctx, *grad_outputs):
-        gd0, = grad_outputs
-        dims=ctx.params['dims']
-        xp = ctx.xp
-        grad0=xp.transpose(gd0, axes=np.argsort(dims))
-        return grad0
-
-
-class Transpose(Function): # keep input _version: True
-    @staticmethod
-    def forward(ctx, *inputs, **params):
-        xt0, = inputs
-        xd0 = xt0.data
-        xp = ctx.xp
-        dim0, dim1 = params['dim0'], params['dim1']
-        yt0 = build_links(xp.swapaxes(xd0, dim0,dim1), grad_fn=ctx)
-        return yt0
-    @staticmethod
-    def backward(ctx, *grad_outputs):
-        gd0, = grad_outputs
-        dim0, dim1=ctx.params['dim0'],ctx.params['dim1']
-        xp = ctx.xp
-        grad0=xp.swapaxes(gd0, dim0, dim1)
-        return grad0
-
 
 class Mm(Function):
     @staticmethod
@@ -260,41 +226,6 @@ class Cat(Function):
         return gradn
 
 
-
-class Slice(Function): # keep input _version: True
-    @staticmethod
-    def forward(ctx, *inputs, **params):
-        xt0, = inputs
-        xd0 = xt0.data
-        yt0 = build_links(xd0[params['key']], grad_fn=ctx)
-        ctx.params['shape']=xd0.shape
-        return yt0
-
-    @staticmethod
-    def backward(ctx, *grad_outputs):
-        gd0, = grad_outputs
-        xd0_shape = ctx.params['shape']
-        key = ctx.params['key']
-        xp = ctx.xp
-        grad0=xp.zeros(xd0_shape, dtype=gd0.dtype)
-        grad0[key]=gd0
-        return grad0
-
-
-class View(Function): # keep input _version: True
-    @staticmethod
-    def forward(ctx, *inputs, **params):
-        xt0, = inputs
-        xd0 = xt0.data
-        yt0 = build_links(xd0.reshape(params['shape']), grad_fn=ctx)
-        ctx.params['shape'] = xd0.shape
-        return yt0
-    @staticmethod
-    def backward(ctx, *grad_outputs):
-        gd0, = grad_outputs
-        grad0=gd0.reshape(ctx.params['shape'])
-        return grad0
-
 class Split(Function): # keep input _version: True
     @staticmethod
     def forward(ctx, *inputs, **params):
@@ -471,7 +402,7 @@ class Squeeze(Function): # keep input _version: True
         else:
             xp = ctx.xp
             yt0 = build_links(xp.squeeze(xd0, squeeze_dims), grad_fn=ctx)
-        params={'squeeze_dims':squeeze_dims}
+        ctx.params['squeeze_dims']=squeeze_dims
         return yt0
     @staticmethod
     def backward(ctx, *grad_outputs):
@@ -628,54 +559,4 @@ class Copy(Function): # keep input _version: True (it's inplace)
             grad0[...] = 0
         return grad0, grad1 # no grad for input
 
-class Clamp(Function):
-    @staticmethod
-    def forward(ctx, *inputs, **params):
-        xt0, = inputs
-        xd0 = xt0.data
-        xp = ctx.xp
-        if params['inplace']:
-            inplace_precheck(xt0)
-            if ctx.requires_grad:
-                ctx.params['copy'] = xd0.copy()
-            xp.clip(xd0, a_min=params['min'],a_max=params['max'],out=xd0)
-            yt0 = inplace_update(xt0, ctx)
-            ctx.save_for_backward(None)
-        else:
-            yt0 = build_links(xp.clip(xd0, a_min=params['min'],a_max=params['max']), grad_fn=ctx)
-            ctx.save_for_backward(xt0)
-        return yt0
-
-    @staticmethod
-    def backward(ctx, *grad_outputs):
-        gd0, = grad_outputs
-        xd0, = ctx.saved_tensors
-        if xd0 is None:
-            xd0 = ctx.params['copy']
-        grad0 = gd0
-        lim_min=ctx.params['min']
-        lim_max=ctx.params['max']
-        if lim_min is not None:
-            gd0[xd0<lim_min]=0
-        if lim_max is not None:
-            gd0[xd0>lim_max]=0
-        return grad0
-
-class Max(Function):
-    @staticmethod
-    def forward(ctx, *inputs, **params):
-        xt0, = inputs
-        xd0 = xt0.data
-        xp = ctx.xp
-        yt0 = build_links(xp.max(xd0), grad_fn=ctx)
-        ctx.save_for_backward(xt0, yt0)
-        return yt0
-
-    @staticmethod
-    def backward(ctx, *grad_outputs):
-        gd0, = grad_outputs
-        xd0, yd0 = ctx.saved_tensors
-        grad0=ctx.xp.zeros_like(xd0)
-        grad0[xd0==yd0]=gd0
-        return grad0
 

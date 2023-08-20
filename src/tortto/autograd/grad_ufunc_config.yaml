@@ -7,6 +7,7 @@ Sqrt:
   save_for_backward: yt0
   params:
   backward: ["gd0 / (yd0 * 2)"]
+  backward_additional:
 
 
 Exp:
@@ -18,6 +19,7 @@ Exp:
   save_for_backward: yt0
   params:
   backward: ["gd0 * yd0"]
+  backward_additional:
 
 
 Tan:
@@ -29,6 +31,7 @@ Tan:
   save_for_backward: yt0
   params:
   backward: ["gd0 * (1 + yd0 * yd0)"]
+  backward_additional:
 
 
 Tanh:
@@ -40,6 +43,7 @@ Tanh:
   save_for_backward: yt0
   params:
   backward: ["gd0 * (1 - yd0 * yd0)"]
+  backward_additional:
 
 
 Sigmoid:
@@ -51,6 +55,7 @@ Sigmoid:
   save_for_backward: yt0
   params:
   backward: ["gd0 * yd0 * (1 - yd0)"]
+  backward_additional:
 
 
 Sign:
@@ -62,6 +67,7 @@ Sign:
   save_for_backward:
   params:
   backward: ["xp.zeros_like(gd0)"]
+  backward_additional:
 
 
 Neg:
@@ -73,6 +79,7 @@ Neg:
   save_for_backward:
   params:
   backward: ["-gd0"]
+  backward_additional:
 
 
 Add:
@@ -83,7 +90,8 @@ Add:
   forward_outplace: xp.add(..., ///)
   save_for_backward:
   params: shape
-  backward: ["reverse_broadcast(gd0, x0_shape)"]
+  backward: ["reverse_broadcast(gd0, x0_shape)", "reverse_broadcast(gd0, x1_shape)"]
+  backward_additional:
 
 
 Sub:
@@ -95,6 +103,7 @@ Sub:
   save_for_backward:
   params: shape
   backward: ["reverse_broadcast(gd0, x0_shape)", "-reverse_broadcast(gd0, x1_shape)"]
+  backward_additional:
 
 
 Sin:
@@ -106,6 +115,7 @@ Sin:
   save_for_backward: xt0
   params:
   backward: ["gd0 * xp.cos(xd0)"]
+  backward_additional:
 
 
 Cos:
@@ -117,6 +127,7 @@ Cos:
   save_for_backward: xt0
   params:
   backward: ["-gd0 * xp.sin(xd0)"]
+  backward_additional:
 
 
 Log:
@@ -128,6 +139,7 @@ Log:
   save_for_backward: xt0
   params:
   backward: ["gd0 / xd0"]
+  backward_additional:
 
 
 Abs:
@@ -139,6 +151,7 @@ Abs:
   save_for_backward: xt0
   params:
   backward: ["gd0 * xp.sign(xd0)"]
+  backward_additional:
 
 
 Pow:
@@ -150,14 +163,103 @@ Pow:
   save_for_backward: xt0, xt1, yt0
   params: shape
   backward: ["reverse_broadcast(gd0 * xd1 * yd0 / xd0, x0_shape)", "reverse_broadcast(gd0 * xp.log(xd0) * yd0, x1_shape)"]
+  backward_additional:
 
-#Mul:
-#  num_inputs: 2
-#  num_outputs: 1
-#  allow_inplace: True
-#  forward_inplace: xp.multiply(xd..., xd///, out=xd...)
-#  selective_copy:
-#  forward_outplace: xp.multiply(xd..., xd///)
-#  save_for_backward: xt0, xt1
-#  params: shape
-#  backward: ["reverse_broadcast(gd0 * xd1, xd0_shape)", "reverse_broadcast(gd0 * xd0, xd1_shape)"]
+Mul:
+  num_inputs: 2
+  num_outputs: 1
+  allow_inplace: True
+  forward_inplace: xp.multiply(..., ///, out=...)
+  forward_outplace: xp.multiply(..., ///)
+  save_for_backward: xt0, xt1
+  params: shape
+  backward: ["reverse_broadcast(gd0 * xd1, x0_shape)", "reverse_broadcast(gd0 * xd0, x1_shape)"]
+  backward_additional:
+
+Div:
+  num_inputs: 2
+  num_outputs: 1
+  allow_inplace: True
+  forward_inplace: xp.divide(..., ///, out=...)
+  forward_outplace: xp.divide(..., ///)
+  save_for_backward: xt0, xt1
+  params: shape
+  backward: ["reverse_broadcast(gd0 / xd1, x0_shape)", "reverse_broadcast(-gd0 * xd0 / (xd1 * xd1), x1_shape)"]
+  backward_additional:
+
+Clamp:
+  num_inputs: 1
+  num_outputs: 1
+  allow_inplace: True
+  forward_inplace: xp.clip(..., a_min=params['min'], a_max=params['max'], out=...)
+  forward_outplace: xp.clip(..., a_min=params['min'], a_max=params['max'])
+  save_for_backward: xt0
+  params:
+  backward: ["gd0"]
+  backward_additional: ["lim_min = ctx.params['min']\nlim_max = ctx.params['max']\nif lim_min is not None:\n    gd0[xd0 < lim_min] = 0\nif lim_max is not None:\n    gd0[xd0 > lim_max] = 0"]
+
+Max:
+  num_inputs: 1
+  num_outputs: 1
+  allow_inplace: False
+  forward_inplace:
+  forward_outplace: xp.max(...)
+  save_for_backward: xt0, yt0
+  params:
+  backward: ["xp.zeros_like(xd0)"]
+  backward_additional: ["grad0[xd0 == yd0] = gd0"]
+
+Min:
+  num_inputs: 1
+  num_outputs: 1
+  allow_inplace: False
+  forward_inplace:
+  forward_outplace: xp.min(...)
+  save_for_backward: xt0, yt0
+  params:
+  backward: ["xp.zeros_like(xd0)"]
+  backward_additional: ["grad0[xd0 == yd0] = gd0"]
+
+View:
+  num_inputs: 1
+  num_outputs: 1
+  allow_inplace: False
+  forward_inplace:
+  forward_outplace: ....reshape(params['shape'])
+  save_for_backward:
+  params: shape
+  backward: ["gd0.reshape(x0_shape)"]
+  backward_additional:
+
+Slice:
+  num_inputs: 1
+  num_outputs: 1
+  allow_inplace: False
+  forward_inplace:
+  forward_outplace: ...[params['key']]
+  save_for_backward:
+  params: shape
+  backward: ["xp.zeros(x0_shape, dtype=gd0.dtype)"]
+  backward_additional: ["grad0[ctx.params['key']] = gd0"]
+
+Permute:
+  num_inputs: 1
+  num_outputs: 1
+  allow_inplace: False
+  forward_inplace:
+  forward_outplace: xp.transpose(..., params['dims'])
+  save_for_backward:
+  params:
+  backward: ["xp.transpose(gd0, axes=np.argsort(ctx.params['dims']))"]
+  backward_additional:
+
+Transpose:
+  num_inputs: 1
+  num_outputs: 1
+  allow_inplace: False
+  forward_inplace:
+  forward_outplace: xp.swapaxes(xd0, params['dim0'], params['dim1'])
+  save_for_backward:
+  params:
+  backward: ["xp.swapaxes(gd0, ctx.params['dim0'], ctx.params['dim1'])"]
+  backward_additional:

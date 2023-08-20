@@ -156,10 +156,8 @@ def argmin(x, dim=None, keepdim=False):
 
 
 """
-from grad_ufunc
+start: from grad_ufunc
 """
-
-
 def sqrt(input):
     return Sqrt.apply(input, inplace=False)
 
@@ -281,9 +279,18 @@ def div(input, other):
 
 divide = div
 
-"""
-from grad_fcn
-"""
+def clamp(input, min=None, max=None):
+    return Clamp.apply(input, min=min, max=max, inplace=False)
+
+def clamp_(input, min=None, max=None):
+    return Clamp.apply(input, min=min, max=max, inplace=True)
+
+def max(input):
+    return Max.apply(input)
+
+def min(input):
+    return Min.apply(input)
+
 def permute(input, dims):
     return Permute.apply(input, dims=dims)
 def moveaxis(input, source, destination):
@@ -303,7 +310,14 @@ def transpose(input, dim0, dim1):
     return Transpose.apply(input, dim0=dim0, dim1=dim1)
 swapaxes=transpose
 swapdims=transpose
+"""
+end: from grad_ufunc
+"""
 
+
+"""
+start: from grad_fcn
+"""
 def mm(input, mat2):
     return Mm.apply(input, mat2)
 def mv(input, vec):
@@ -362,15 +376,9 @@ def masked_fill_(input, mask, value):
     if value.__class__ is not tt.Tensor:
         value=tt.tensor(value, copy=False)
     return MaskedFill.apply(input, value, mask=mask, inplace=True)
-
-def clamp(input, min=None, max=None):
-    return Clamp.apply(input, min=min, max=max, inplace=False)
-
-def clamp_(input, min=None, max=None):
-    return Clamp.apply(input, min=min, max=max, inplace=True)
-
-def max(input):
-    return Max.apply(input)
+"""
+end: from grad_fcn
+"""
 
 
 
