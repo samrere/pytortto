@@ -652,13 +652,14 @@ class Clamp(Function):
         xd0, = ctx.saved_tensors
         if xd0 is None:
             xd0 = ctx.params['copy']
+        grad0 = gd0
         lim_min=ctx.params['min']
         lim_max=ctx.params['max']
         if lim_min is not None:
             gd0[xd0<lim_min]=0
         if lim_max is not None:
             gd0[xd0>lim_max]=0
-        return gd0
+        return grad0
 
 class Max(Function):
     @staticmethod
