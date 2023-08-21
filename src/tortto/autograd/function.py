@@ -28,10 +28,15 @@ class FunctionBase(object):
     def saved_tensors(self): # output tensor.data
         return tuple(get_data(pair) for pair in self.to_save)
 
-    def clear(self): # clear grad etc. after backward
+
+    def clear(self): # clear grad etc. after backward.
         self.to_save = None
-        self.grad = None
-        self.params = None
+        if self.__class__ is tt.AccumulateGrad or self._forward_cls is tt.ToCopy:
+            self.grad = [None]
+        else:
+            self.grad=None
+            self.params = None
+
 
 
 
@@ -63,7 +68,6 @@ class BackwardFunction(FunctionBase): # metaclass for all grad_fn
 
 class AccumulateGrad(BackwardFunction):
     def apply(self, *args):
-
         # shape assertion, comment it out
         assert self.grad[0].shape == self.variable.shape, f"backward shape error. grad shape is {self.grad[0].shape} " \
                                                           f"whereas variable shape is {self.variable.shape}"
@@ -155,13 +159,14 @@ class Function(FunctionBase):
                                        f"address of inputs[0] is {inputs[0].data_ptr()}")
             assert r.data.__class__ in {tt.nparray, tt.cparray}, f'forward output of {cls.__name__} is ' \
                                                                  f'{r.data.__class__}, not xparray'
-            for i in inputs:
-                if i is None:
+            for i in range(len(inputs)):
+                inp=inputs[i]
+                if inp is None:
                     continue
-                if cls is tt.Max0 and i==1:
+                if i==1 and (cls is tt.Max0 or cls is tt.Min0):
                     continue
-                assert r.data.dtype.type is i.data.dtype.type, f"forward dtype error at {cls.__name__}, " \
-                                                               f"input is {i.data.dtype.type.__name__} whereas " \
+                assert r.data.dtype.type is inp.data.dtype.type, f"forward dtype error at {cls.__name__}, " \
+                                                               f"input is {inp.data.dtype.type.__name__} whereas " \
                                                                f"output is {r.data.dtype.type.__name__}"
         ######################## forward assertion ends, can be commented out
 

@@ -294,8 +294,19 @@ def max(input, dim=None, keepdim=False):
         else:
             return Max0.apply(input, dim=dim, keepdim=keepdim)
 
-# def min(input):
-#     return Min.apply(input)
+def min(input, dim=None, keepdim=False):
+    if dim.__class__ is input.__class__:
+        return Minimum.apply(input, dim)
+    else:
+        if dim is None:
+            return Min1.apply(input)
+        else:
+            return Min0.apply(input, dim=dim, keepdim=keepdim)
+def maximum(input, other):
+    return Maximum.apply(input, other)
+
+def minimum(input, other):
+    return Minimum.apply(input, other)
 
 def permute(input, dims):
     return Permute.apply(input, dims=dims)

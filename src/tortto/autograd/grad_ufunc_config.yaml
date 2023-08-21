@@ -198,7 +198,7 @@ Clamp:
   backward: ["gd0"]
   backward_additional: ["lim_min = ctx.params['min']\nlim_max = ctx.params['max']\nif lim_min is not None:\n    gd0[xd0 < lim_min] = 0\nif lim_max is not None:\n    gd0[xd0 > lim_max] = 0"]
 
-Max:
+Max1:
   num_inputs: 1
   num_outputs: 1
   allow_inplace: False
@@ -209,7 +209,7 @@ Max:
   backward: ["xp.zeros_like(xd0)"]
   backward_additional: ["grad0[xd0 == yd0] = gd0"]
 
-Min:
+Min1:
   num_inputs: 1
   num_outputs: 1
   allow_inplace: False

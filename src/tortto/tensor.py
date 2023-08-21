@@ -484,11 +484,11 @@ class Tensor:
     def clamp_(self, min=None, max=None):
         return clamp_(self, min=min, max=max)
 
-    # def max(self):
-    #     return max(self)
+    def max(self, dim=None, keepdim=False):
+        return max(self, dim=dim, keepdim=keepdim)
 
-    def min(self):
-        return min(self)
+    def min(self, dim=None, keepdim=False):
+        return min(self, dim=dim, keepdim=keepdim)
 
     def backward(self, gradient=None):
         if not self.requires_grad:
