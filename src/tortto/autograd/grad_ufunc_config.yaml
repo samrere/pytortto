@@ -250,7 +250,7 @@ Permute:
   forward_outplace: xp.transpose(..., params['dims'])
   save_for_backward:
   params:
-  backward: ["xp.transpose(gd0, axes=np.argsort(ctx.params['dims']))"]
+  backward: ["xp.transpose(gd0, axes=tt.np.argsort(ctx.params['dims']))"]
   backward_additional:
 
 Transpose:

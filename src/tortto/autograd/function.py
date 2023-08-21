@@ -108,7 +108,7 @@ class Function(FunctionBase):
     def apply(cls, *inputs, **params):
         ## create the grad_fn class
         grad_fn_class = type(cls.__name__ + 'Backward', (BackwardFunction,), {'_forward_cls': cls})
-        cls._backward_cls = grad_fn_class
+        # cls._backward_cls = grad_fn_class
         grad_fn=grad_fn_class() # instantiate a grad_fn object
         grad_fn.params = params
 
@@ -157,6 +157,8 @@ class Function(FunctionBase):
                                                                  f'{r.data.__class__}, not xparray'
             for i in inputs:
                 if i is None:
+                    continue
+                if cls is tt.Max0 and i==1:
                     continue
                 assert r.data.dtype.type is i.data.dtype.type, f"forward dtype error at {cls.__name__}, " \
                                                                f"input is {i.data.dtype.type.__name__} whereas " \

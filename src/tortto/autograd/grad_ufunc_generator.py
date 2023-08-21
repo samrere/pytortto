@@ -42,11 +42,10 @@ class indent:
 
 
 def generate_grad_ufunc():
-    # if os.path.exists(f'{Path(__file__).parent}/grad_ufunc.py'):
-    #     return
+    if os.path.exists(f'{Path(__file__).parent}/grad_ufunc.py'):
+        return
     with open(rf'{Path(__file__).parent}/grad_ufunc_config.yaml') as file:
         yml = yaml.load(file, Loader=yaml.FullLoader)
-        c('from tortto import np')
         c('from .function import *')
         c('from .helper import *')
         newline()

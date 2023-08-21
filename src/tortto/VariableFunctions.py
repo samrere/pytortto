@@ -285,11 +285,17 @@ def clamp(input, min=None, max=None):
 def clamp_(input, min=None, max=None):
     return Clamp.apply(input, min=min, max=max, inplace=True)
 
-def max(input):
-    return Max.apply(input)
+def max(input, dim=None, keepdim=False):
+    if dim.__class__ is input.__class__:
+        return Maximum.apply(input, dim)
+    else:
+        if dim is None:
+            return Max1.apply(input)
+        else:
+            return Max0.apply(input, dim=dim, keepdim=keepdim)
 
-def min(input):
-    return Min.apply(input)
+# def min(input):
+#     return Min.apply(input)
 
 def permute(input, dims):
     return Permute.apply(input, dims=dims)

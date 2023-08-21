@@ -484,8 +484,8 @@ class Tensor:
     def clamp_(self, min=None, max=None):
         return clamp_(self, min=min, max=max)
 
-    def max(self):
-        return max(self)
+    # def max(self):
+    #     return max(self)
 
     def min(self):
         return min(self)
