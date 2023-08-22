@@ -37,7 +37,11 @@ class nparray(np.ndarray):
 
 # cupy
 from importlib.util import find_spec
-cparray = None
+# cparray = None
+class cparray:
+    def __init__(self, *args, **kwargs):
+        raise RuntimeError("cupy not installed, can't use cuda")
+
 cupy_is_loaded = bool(find_spec('cupy'))
 cp = None
 

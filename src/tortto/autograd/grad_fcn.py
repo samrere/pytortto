@@ -2,9 +2,6 @@ from tortto import np, cp, cparray, cupy_is_loaded
 from .function import *
 from .helper import *
 
-buildin_sum = sum
-
-
 class Mm(Function):
     @staticmethod
     def forward(ctx, *inputs, **params):
@@ -252,8 +249,8 @@ class Split(Function): # keep input _version: True
             )
         else:
             sections=split_size_or_sections
-            if buildin_sum(sections) != dim_size:
-                raise RuntimeError(f"split_with_sizes expects split_sizes to sum exactly to 8 "
+            if sum(sections) != dim_size:
+                raise RuntimeError(f"split_with_sizes expects split_sizes to sum exactly to {dim_size} "
                                    f"(input tensor's size at dimension {dim}), but got split_sizes={sections}")
             sum_sections = np.cumsum(split_size_or_sections)
             ytn = tuple(
@@ -286,66 +283,6 @@ class Split(Function): # keep input _version: True
             axis=dim
         )
         return grad0
-
-
-class ToCopy(Function): # keep input _version: False
-    @staticmethod
-    def forward(ctx, *inputs, **params):
-        xt0, = inputs
-        xd0 = xt0.data
-        target_device = params['target_device']
-        xp=ctx.xp
-        if xp is cp:
-            if target_device == 'cuda':
-                return xt0
-            else:
-                yt0 = build_links(xd0.get(), grad_fn=ctx)
-        else:
-            if target_device == 'cpu':
-                return xt0
-            else:
-                if not cupy_is_loaded:
-                    raise RuntimeError("cupy not installed, can't use cuda")
-                yt0 = build_links(cparray(xd0), grad_fn=ctx)
-        return yt0
-    @staticmethod
-    def backward(ctx, *grad_outputs):
-        gd0, = grad_outputs
-        target_device = ctx.params['target_device']
-        if target_device == 'cpu':
-            grad0=cp.array(gd0)
-        else:
-            grad0=gd0.get()
-        return grad0
-
-
-class Repeat(Function): # keep input _version: False
-    @staticmethod
-    def forward(ctx, *inputs, **params):
-        xt0, = inputs
-        xd0 = xt0.data
-        sizes = params['sizes']
-        xp = ctx.xp
-        yt0 = build_links(xp.tile(xd0, sizes), grad_fn=ctx)
-        ctx.params['shape']=xd0.shape
-        ctx.params['yt0_strides']=yt0.strides
-        return yt0
-    @staticmethod
-    def backward(ctx, *grad_outputs):
-        gd0,=grad_outputs
-        sizes = ctx.params['sizes']
-        xd0_shape = ctx.params['shape']
-        yt0_strides=ctx.params['yt0_strides']
-        xd0_ndim=len(xd0_shape)
-        leading_dims=tuple(range(len(sizes)))
-        xp = ctx.xp
-        target_shape=sizes+xd0_shape
-        target_strides = yt0_strides[:-xd0_ndim]+\
-                         tuple(xd0_shape[i]*yt0_strides[i-xd0_ndim] for i in range(xd0_ndim))+ \
-                         yt0_strides[-xd0_ndim:]
-        grad0=xp.lib.stride_tricks.as_strided(gd0, shape=target_shape, strides=target_strides).sum(leading_dims)
-        return grad0
-
 
 class Expand(Function): # keep input _version: True
     @staticmethod
@@ -384,50 +321,6 @@ class Expand(Function): # keep input _version: True
         xd0_singleton_dims = tuple(ctx.params['xd0_singleton_dims'])
         leading_dims = tuple(range(ctx.params['leading_dims']))
         grad0=gd0.sum(xd0_singleton_dims+leading_dims, keepdims=True).squeeze(leading_dims)
-        return grad0
-
-class Squeeze(Function): # keep input _version: True
-    @staticmethod
-    def forward(ctx, *inputs, **params):
-        xt0, = inputs
-        xd0 = xt0.data
-        dim = params['dim']
-        if dim.__class__ is int:
-            dim = (dim,)
-        if dim is None:
-            dim = tuple(range(xd0.ndim))
-        squeeze_dims=tuple(i for i in dim if xd0.shape[i] == 1)
-        if len(squeeze_dims) == 0:
-            yt0 = build_links(xd0, grad_fn=ctx)
-        else:
-            xp = ctx.xp
-            yt0 = build_links(xp.squeeze(xd0, squeeze_dims), grad_fn=ctx)
-        ctx.params['squeeze_dims']=squeeze_dims
-        return yt0
-    @staticmethod
-    def backward(ctx, *grad_outputs):
-        gd0, = grad_outputs
-        squeeze_dims = ctx.params['squeeze_dims']
-        xp = ctx.xp
-        grad0 = xp.expand_dims(gd0, squeeze_dims)
-        return grad0
-
-
-class Unsqueeze(Function): # keep input _version: True
-    @staticmethod
-    def forward(ctx, *inputs, **params):
-        xt0, = inputs
-        xd0 = xt0.data
-        dim = params['dim']
-        xp = ctx.xp
-        yt0 = build_links(xp.expand_dims(xd0, dim), grad_fn=ctx)
-        return yt0
-    @staticmethod
-    def backward(ctx, *grad_outputs):
-        gd0, = grad_outputs
-        dim = ctx.params['dim']
-        xp = ctx.xp
-        grad0 = xp.squeeze(gd0, dim)
         return grad0
 
 
@@ -494,7 +387,6 @@ class CopySlices(Function): # keep input _version: True (it's inplace)
         elif xd0.__class__ is not cparray and xd1.__class__ is cparray:
             xd1 = xd1.get()
             flag = False
-
         inplace_precheck(xt0)
         xd0[key] = xd1
         yt0 = xt0
@@ -558,142 +450,3 @@ class Copy(Function): # keep input _version: True (it's inplace)
             grad0 = gd0
             grad0[...] = 0
         return grad0, grad1 # no grad for input
-
-
-class Maximum(Function):
-    # optimize it?
-    @staticmethod
-    def forward(ctx, *inputs, **params):
-        xt0, xt1= inputs
-        xd0, xd1 = xt0.data, xt1.data
-        xp = ctx.xp
-        yt0 = build_links(xp.maximum(xd0, xd1), grad_fn=ctx)
-        ctx.save_for_backward(xt0, xt1)
-        ctx.params['shape'] = (xd0.shape, xd1.shape)
-        return yt0
-
-    @staticmethod
-    def backward(ctx, *grad_outputs):
-        gd0, = grad_outputs
-        x0_shape, x1_shape = ctx.params['shape']
-        xd0, xd1 = ctx.saved_tensors
-        xp = ctx.xp
-        maximum = xp.maximum(xd0, xd1)
-        xd0_equal_max_ind = maximum == xd0
-        xd1_equal_max_ind = maximum == xd1
-        both_equal_max_ind = xd0_equal_max_ind & xd1_equal_max_ind
-        grad0, grad1 = None, None
-        if ctx.needs_input_grad[0]:
-            grad0=gd0.copy() if ctx.needs_input_grad[1] else gd0
-            grad0[~xd0_equal_max_ind]=0
-            grad0[both_equal_max_ind]/=2
-            grad0=reverse_broadcast(grad0, x0_shape)
-        if ctx.needs_input_grad[1]:
-            grad1=gd0
-            grad1[~xd1_equal_max_ind] = 0
-            grad1[both_equal_max_ind] /= 2
-            grad1 = reverse_broadcast(grad1, x1_shape)
-        return grad0, grad1
-
-class Minimum(Function):
-    # optimize it?
-    @staticmethod
-    def forward(ctx, *inputs, **params):
-        xt0, xt1= inputs
-        xd0, xd1 = xt0.data, xt1.data
-        xp = ctx.xp
-        yt0 = build_links(xp.minimum(xd0, xd1), grad_fn=ctx)
-        ctx.save_for_backward(xt0, xt1)
-        ctx.params['shape'] = (xd0.shape, xd1.shape)
-        return yt0
-
-    @staticmethod
-    def backward(ctx, *grad_outputs):
-        gd0, = grad_outputs
-        x0_shape, x1_shape = ctx.params['shape']
-        xd0, xd1 = ctx.saved_tensors
-        xp = ctx.xp
-        maximum = xp.minimum(xd0, xd1)
-        xd0_equal_min_ind = maximum == xd0
-        xd1_equal_min_ind = maximum == xd1
-        both_equal_min_ind = xd0_equal_min_ind & xd1_equal_min_ind
-        grad0, grad1 = None, None
-        if ctx.needs_input_grad[0]:
-            grad0=gd0.copy() if ctx.needs_input_grad[1] else gd0
-            grad0[~xd0_equal_min_ind]=0
-            grad0[both_equal_min_ind]/=2
-            grad0=reverse_broadcast(grad0, x0_shape)
-        if ctx.needs_input_grad[1]:
-            grad1=gd0
-            grad1[~xd1_equal_min_ind] = 0
-            grad1[both_equal_min_ind] /= 2
-            grad1 = reverse_broadcast(grad1, x1_shape)
-        return grad0, grad1
-
-class Max0(Function):
-    # optimize it?
-    # https://stackoverflow.com/questions/46840848/numpy-how-to-use-argmax-results-to-get-the-actual-max
-    @staticmethod
-    def forward(ctx, *inputs, **params):
-        xt0, = inputs
-        xd0 = xt0.data
-        xp = ctx.xp
-        dim=ctx.params['dim']
-        keepdim=ctx.params['keepdim']
-        yt0 = build_links(xp.max(xd0, axis=dim, keepdims=keepdim), grad_fn=ctx)
-        argmax = xp.argmax(xd0, axis=dim, keepdims=keepdim)
-        yt1 = tt.tensor(argmax, copy=False)
-        ctx.params['argmax'] = argmax
-        ctx.params['shape'] = xd0.shape
-        return yt0, yt1
-
-    @staticmethod
-    def backward(ctx, *grad_outputs):
-        gd0, *_ = grad_outputs
-        keepdim=ctx.params['keepdim']
-        dim=ctx.params['dim']
-        argmax=ctx.params['argmax']
-        x0_shape=ctx.params['shape']
-        xp=ctx.xp
-        idx = xp.ogrid[[slice(ax) for ax in argmax.shape]]
-        if keepdim:
-            idx[dim] = argmax
-        else:
-            idx.insert(dim, argmax)
-        grad0=xp.zeros(x0_shape, dtype=gd0.dtype)
-        grad0[tuple(idx)]=gd0
-        return grad0
-
-class Min0(Function):
-    # optimize it?
-    # https://stackoverflow.com/questions/46840848/numpy-how-to-use-argmax-results-to-get-the-actual-max
-    @staticmethod
-    def forward(ctx, *inputs, **params):
-        xt0, = inputs
-        xd0 = xt0.data
-        xp = ctx.xp
-        dim=ctx.params['dim']
-        keepdim=ctx.params['keepdim']
-        yt0 = build_links(xp.min(xd0, axis=dim, keepdims=keepdim), grad_fn=ctx)
-        argmin = xp.argmin(xd0, axis=dim, keepdims=keepdim)
-        yt1 = tt.tensor(argmin, copy=False)
-        ctx.params['argmin'] = argmin
-        ctx.params['shape'] = xd0.shape
-        return yt0, yt1
-
-    @staticmethod
-    def backward(ctx, *grad_outputs):
-        gd0, *_ = grad_outputs
-        keepdim=ctx.params['keepdim']
-        dim=ctx.params['dim']
-        argmin=ctx.params['argmin']
-        x0_shape=ctx.params['shape']
-        xp=ctx.xp
-        idx = xp.ogrid[[slice(ax) for ax in argmin.shape]]
-        if keepdim:
-            idx[dim] = argmin
-        else:
-            idx.insert(dim, argmin)
-        grad0=xp.zeros(x0_shape, dtype=gd0.dtype)
-        grad0[tuple(idx)]=gd0
-        return grad0

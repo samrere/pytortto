@@ -70,18 +70,26 @@ def randn(*shape, dtype=None, requires_grad=False):
     return output
 
 
-def eye(N, M=None, k=0, **kwargs):
-    return tt.Tensor(np.eye(N, M, k), **kwargs)
+def eye(N, M=None, k=0, dtype=None, requires_grad=False):
+    if dtype is None:
+        dtype = tt.float32
+    value = np.eye(N, M, k, dtype=dtype)
+    return tt.Tensor(value, dtype=dtype, requires_grad=requires_grad)
 
 
-def arange(start, end=None, step=1, **kwargs):
+def arange(start, end=None, step=1, dtype=None, requires_grad=False):
+    # default dtype is int64
     if end is None:
         start, end = 0, start
-    return tt.Tensor(np.arange(start, end, step), **kwargs)
+    value = np.arange(start, end, step, dtype=dtype)
+    return tt.Tensor(value, dtype=value.dtype, requires_grad=requires_grad)
 
 
-def linspace(start, end, steps, **kwargs):
-    return tt.Tensor([np.linspace(start, end, steps)], **kwargs)
+def linspace(start, end, steps, dtype=None, requires_grad=False):
+    if dtype is None:
+        dtype = tt.float32
+    value = np.linspace(start, end, steps, dtype=dtype)
+    return tt.Tensor(value , dtype=dtype, requires_grad=requires_grad)
 
 
 def tensor(data, requires_grad=False, dtype=None, copy=True, **kwargs):

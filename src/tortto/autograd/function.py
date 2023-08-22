@@ -152,15 +152,16 @@ class Function(FunctionBase):
             results = (results,)
 
         ######################## forward assertion starts, can be commented out
-        for r in results:
+        for i in range(len(results)):
+            r=results[i]
             if params.get('inplace'):
                 if inputs[0].data_ptr()!=r.data_ptr():
                     raise RuntimeError(f"inplace is True but output address is {r.data_ptr()}, whereas "
                                        f"address of inputs[0] is {inputs[0].data_ptr()}")
             assert r.data.__class__ in {tt.nparray, tt.cparray}, f'forward output of {cls.__name__} is ' \
                                                                  f'{r.data.__class__}, not xparray'
-            for i in range(len(inputs)):
-                inp=inputs[i]
+
+            for inp in inputs:
                 if inp is None:
                     continue
                 if i==1 and (cls is tt.Max0 or cls is tt.Min0):

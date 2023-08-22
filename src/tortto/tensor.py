@@ -287,6 +287,8 @@ class Tensor:
         raise RuntimeError(f"In-place matmul is not supported. Use 'a = a @ b' instead of 'a @= b'.")
 
     def __getitem__(self, key):
+        if key[0].__class__ is Tensor: # advanced indexing
+            key=tuple(i.data for i in key)
         return Slice.apply(self, key=key)
 
 
