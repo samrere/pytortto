@@ -56,7 +56,7 @@ class Tensor:
     def T(self):
         if self.ndim!=2:
             raise RuntimeError(f"x.T expects a tensor with 2 dimensions, but self is {self.ndim}D")
-        return permute(self, (1,0))
+        return transpose(self, 1, 0)
 
     @property
     def device(self):
@@ -387,6 +387,7 @@ class Tensor:
 
     def permute(self, dims):
         return permute(self, dims)
+
     def transpose(self, dim0, dim1):
         return transpose(self, dim0, dim1)
 

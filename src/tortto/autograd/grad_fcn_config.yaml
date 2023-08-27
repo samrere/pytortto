@@ -1,0 +1,602 @@
+imports: |
+  from .function import *
+  from .helper import *
+  from tortto import np, cp, cparray
+Sqrt:
+  comment:
+  params:
+  forward:
+    common:
+    inplace: xp.sqrt(x0, out=x0)
+    outplace: y0 = xp.sqrt(x0)
+  backward:
+    common:
+    gradient: grad0 = g0 / (y0 * 2)
+
+Exp:
+  comment:
+  params:
+  forward:
+    common:
+    inplace: xp.exp(x0, out=x0)
+    outplace: y0 = xp.exp(x0)
+  backward:
+    common:
+    gradient: grad0 = g0 * y0
+
+Tan:
+  comment:
+  params:
+  forward:
+    common:
+    inplace: xp.tan(x0, out=x0)
+    outplace: y0 = xp.tan(x0)
+  backward:
+    common:
+    gradient: grad0 = g0 * (1 + y0 * y0)
+
+Tanh:
+  comment:
+  params:
+  forward:
+    common:
+    inplace: xp.tanh(x0, out=x0)
+    outplace: y0 = xp.tanh(x0)
+  backward:
+    common:
+    gradient: grad0 = g0 * (1 - y0 * y0)
+
+Sigmoid:
+  comment:
+  params:
+  forward:
+    common:
+    inplace: xp.exp(-xp.logaddexp(0, -x0, out=x0), out=x0)
+    outplace: y0 = xp.exp(-xp.logaddexp(0, -x0))
+  backward:
+    common:
+    gradient: grad0 = g0 * y0 * (1 - y0)
+
+Sign:
+  comment:
+  params:
+  forward:
+    common:
+    inplace: xp.sign(x0, out=x0)
+    outplace: y0 = xp.sign(x0)
+  backward:
+    common:
+    gradient: grad0 = xp.zeros_like(g0)
+
+Neg:
+  comment:
+  params:
+  forward:
+    common:
+    inplace: xp.negative(x0, out=x0)
+    outplace: y0 = xp.negative(x0)
+  backward:
+    common:
+    gradient: grad0 = -g0
+
+Add:
+  comment:
+  params:
+  forward:
+    common:
+    inplace: xp.add(x0, x1, out=x0)
+    outplace: y0 = xp.add(x0, x1)
+  backward:
+    common:
+    gradient:
+      0: grad0 = reverse_broadcast(g0, x0.shape)
+      1: grad1 = reverse_broadcast(g0, x1.shape)
+
+Sub:
+  comment:
+  params:
+  forward:
+    common:
+    inplace: xp.subtract(x0, x1, out=x0)
+    outplace: y0 = xp.subtract(x0, x1)
+  backward:
+    common:
+    gradient:
+      0: grad0 = reverse_broadcast(g0, x0.shape)
+      1: grad1 = -reverse_broadcast(g0, x1.shape)
+
+Sin:
+  comment:
+  params:
+  forward:
+    common:
+    inplace: xp.sin(x0, out=x0)
+    outplace: y0 = xp.sin(x0)
+  backward:
+    common:
+    gradient: grad0 = g0 * xp.cos(x0)
+
+Cos:
+  comment:
+  params:
+  forward:
+    common:
+    inplace: xp.cos(x0, out=x0)
+    outplace: y0 = xp.cos(x0)
+  backward:
+    common:
+    gradient: grad0 = g0 * -xp.sin(x0)
+
+Log:
+  comment:
+  params:
+  forward:
+    common:
+    inplace: xp.log(x0, out=x0)
+    outplace: y0 = xp.log(x0)
+  backward:
+    common:
+    gradient: grad0 = g0 / x0
+
+Abs:
+  comment:
+  params:
+  forward:
+    common:
+    inplace: xp.abs(x0, out=x0)
+    outplace: y0 = xp.abs(x0)
+  backward:
+    common:
+    gradient: grad0 = g0 * xp.sign(x0)
+
+Pow:
+  comment:
+  params:
+  forward:
+    common:
+    inplace: xp.power(x0, x1, out=x0)
+    outplace: y0 = xp.power(x0, x1)
+  backward:
+    common:
+    gradient:
+      0: grad0 = reverse_broadcast(g0 * x1 * y0 / x0, x0.shape)
+      1: grad1 = reverse_broadcast(g0 * xp.log(x0) * y0, x1.shape)
+
+Mul:
+  comment:
+  params:
+  forward:
+    common:
+    inplace: xp.multiply(x0, x1, out=x0)
+    outplace: y0 = xp.multiply(x0, x1)
+  backward:
+    common:
+    gradient:
+      0: grad0 = reverse_broadcast(g0 * x1, x0.shape)
+      1: grad1 = reverse_broadcast(g0 * x0, x1.shape)
+
+Div:
+  comment:
+  params:
+  forward:
+    common:
+    inplace: xp.divide(x0, x1, out=x0)
+    outplace: y0 = xp.divide(x0, x1)
+  backward:
+    common:
+    gradient:
+      0: grad0 = reverse_broadcast(g0 / x1, x0.shape)
+      1: grad1 = reverse_broadcast(-g0 * x0 / (x1 * x1), x1.shape)
+
+Clamp:
+  comment:
+  params: min, max
+  forward:
+    common:
+    inplace: xp.clip(x0, a_min=min, a_max=max, out=x0)
+    outplace: y0 = xp.clip(x0, a_min=min, a_max=max)
+  backward:
+    common:
+    gradient: |
+      grad0 = g0
+      if min is not None:
+          g0[x0 < min] = 0
+      if max is not None:
+          g0[x0 > max] = 0
+
+Max0:
+  comment: |
+    optimize it?
+    https://stackoverflow.com/questions/46840848/numpy-how-to-use-argmax-results-to-get-the-actual-max"
+  params: dim, keepdim
+  forward:
+    common:
+    inplace:
+    outplace:
+      0: y0 = xp.max(x0, axis=dim, keepdims=keepdim)
+      1: |
+        argmax = xp.argmax(x0, axis=dim, keepdims=keepdim)
+        y1 = argmax
+  backward:
+    common:
+    gradient: |
+      idx = xp.ogrid[[slice(ax) for ax in argmax.shape]]
+      if keepdim:
+          idx[dim] = argmax
+      else:
+          idx.insert(dim, argmax)
+      grad0 = xp.zeros(x0.shape, dtype=g0.dtype)
+      grad0[tuple(idx)] = g0
+
+Min0:
+  comment: |
+    optimize it?
+    https://stackoverflow.com/questions/46840848/numpy-how-to-use-argmax-results-to-get-the-actual-max"
+  params: dim, keepdim
+  forward:
+    common:
+    inplace:
+    outplace:
+      0: y0 = xp.min(x0, axis=dim, keepdims=keepdim)
+      1: |
+        argmin = xp.argmin(x0, axis=dim, keepdims=keepdim)
+        y1 = argmin
+  backward:
+    common:
+    gradient: |
+      idx = xp.ogrid[[slice(ax) for ax in argmin.shape]]
+      if keepdim:
+          idx[dim] = argmin
+      else:
+          idx.insert(dim, argmin)
+      grad0 = xp.zeros(x0.shape, dtype=g0.dtype)
+      grad0[tuple(idx)] = g0
+
+Max1:
+  comment:
+  params:
+  forward:
+    common:
+    inplace:
+    outplace: y0 = xp.max(x0)
+  backward:
+    common:
+    gradient: |
+      grad0 = xp.zeros_like(x0)
+      grad0[x0 == y0] = g0
+
+Min1:
+  comment:
+  params:
+  forward:
+    common:
+    inplace:
+    outplace: y0 = xp.min(x0)
+  backward:
+    common:
+    gradient: |
+      grad0 = xp.zeros_like(x0)
+      grad0[x0 == y0] = g0
+
+Maximum:
+  comment: optimize it?
+  params:
+  forward:
+    common:
+    inplace:
+    outplace: y0 = xp.maximum(x0, x1)
+  backward:
+    common: |
+      maximum = xp.maximum(x0, x1)
+      x0_equal_max_ind = maximum == x0
+      x1_equal_max_ind = maximum == x1
+      both_equal_max_ind = x0_equal_max_ind & x1_equal_max_ind
+    gradient:
+      0: |
+        grad0 = g0.copy() if req_grad[1] else g0
+        grad0[~x0_equal_max_ind] = 0
+        grad0[both_equal_max_ind] /= 2
+        grad0 = reverse_broadcast(grad0, x0.shape)
+      1: |
+        grad1 = g0
+        grad1[~x1_equal_max_ind] = 0
+        grad1[both_equal_max_ind] /= 2
+        grad1 = reverse_broadcast(grad1, x1.shape)
+
+Minimum:
+  comment: optimize it?
+  params:
+  forward:
+    common:
+    inplace:
+    outplace: y0 = xp.minimum(x0, x1)
+  backward:
+    common: |
+      minimum = xp.minimum(x0, x1)
+      x0_equal_min_ind = minimum == x0
+      x1_equal_min_ind = minimum == x1
+      both_equal_min_ind = x0_equal_min_ind & x1_equal_min_ind
+    gradient:
+      0: |
+        grad0 = g0.copy() if req_grad[1] else g0
+        grad0[~x0_equal_min_ind] = 0
+        grad0[both_equal_min_ind] /= 2
+        grad0 = reverse_broadcast(grad0, x0.shape)
+      1: |
+        grad1 = g0
+        grad1[~x1_equal_min_ind] = 0
+        grad1[both_equal_min_ind] /= 2
+        grad1 = reverse_broadcast(grad1, x1.shape)
+
+View:
+  comment:
+  params: shape
+  forward:
+    common:
+    inplace:
+    outplace: y0 = x0.reshape(shape)
+  backward:
+    common:
+    gradient: grad0 = g0.reshape(x0.shape)
+
+Slice:
+  comment:
+  params: key
+  forward:
+    common:
+    inplace:
+    outplace: y0 = x0[key]
+  backward:
+    common:
+    gradient: |
+      grad0 = xp.zeros(x0.shape, dtype=g0.dtype)
+      grad0[key] = g0
+
+Permute:
+  comment:
+  params: dims
+  forward:
+    common:
+    inplace:
+    outplace: y0 = xp.transpose(x0, dims)
+  backward:
+    common:
+    gradient: grad0 = xp.transpose(g0, axes=np.argsort(dims))
+
+Transpose:
+  comment:
+  params: dim0, dim1
+  forward:
+    common:
+    inplace:
+    outplace: y0 = xp.swapaxes(x0, dim0, dim1)
+  backward:
+    common:
+    gradient: grad0 = xp.swapaxes(g0, dim0, dim1)
+
+Squeeze:
+  comment:
+  params: dim
+  forward:
+    common:
+    inplace:
+    outplace: |
+      if dim.__class__ is int:
+          dim = (dim,)
+      if dim is None:
+          dim = tuple(range(x0.ndim))
+      squeeze_dims = tuple(i for i in dim if x0.shape[i] == 1)
+      if len(squeeze_dims) == 0:
+          y0 = x0
+      else:
+          y0 = xp.squeeze(x0, squeeze_dims)
+  backward:
+    common:
+    gradient: grad0 = xp.expand_dims(g0, squeeze_dims)
+
+Unsqueeze:
+  comment:
+  params: dim
+  forward:
+    common:
+    inplace:
+    outplace: y0 = xp.expand_dims(x0, dim)
+  backward:
+    common:
+    gradient: grad0 = xp.squeeze(g0, dim)
+
+Repeat:
+  comment:
+  params: sizes
+  forward:
+    common:
+    inplace:
+    outplace: y0 = xp.tile(x0, sizes)
+  backward:
+    common:
+    gradient: |
+      leading_dims = tuple(range(len(sizes)))
+      target_shape = sizes + x0.shape
+      target_strides = y0.strides[:-x0.ndim] + tuple(
+          x0_shape[i] * y0.strides[i - x0.ndim] for i in range(x0.ndim)) + y0.strides[-x0.ndim:]
+      grad0 = xp.lib.stride_tricks.as_strided(g0, shape=target_shape, strides=target_strides).sum(leading_dims)
+
+ToCopy:
+  comment: no-op if same device. use `return xt0` to represent the input tensor
+  params: target_device
+  forward:
+    common:
+    inplace:
+    outplace: |
+      if xp is cp:
+          if target_device == 'cuda':
+              return xt0
+          else:
+              y0 = x0.get()
+      else:
+          if target_device == 'cpu':
+              return xt0
+          else:
+              y0 = cparray(x0)
+  backward:
+    common:
+    gradient: |
+      if target_device == 'cpu':
+          grad0 = cp.array(g0)
+      else:
+          grad0 = g0.get()
+
+Cat:
+  comment:
+  params: dim
+  forward:
+    common:
+    inplace:
+    outplace: |
+      xn = []
+      indices = []
+      for xt in inputs:
+          xn.append(xt.data)
+          indices.append(xt.shape[dim])
+      indices = np.cumsum(indices)
+      y0 = xp.concatenate(xn, dim)
+  backward:
+    common:
+    gradient: grad0 = xp.split(g0, indices_or_sections=indices[:-1], axis=dim)
+
+Mm:
+  comment:
+  params:
+  forward:
+    common: |
+      if x0.ndim != 2:
+          raise RuntimeError('self must be a matrix')
+      if x1.ndim != 2:
+          raise RuntimeError('mat2 must be a matrix')
+    inplace:
+    outplace: y0 = x0 @ x1
+  backward:
+    common:
+    gradient:
+      0: grad0 = g0 @ x1.T
+      1: grad1 = x0.T @ g0
+
+Mv:
+  comment:
+  params:
+  forward:
+    common: |
+      if x0.ndim != 2:
+          raise RuntimeError('input must be a matrix')
+      if x1.ndim != 1:
+          raise RuntimeError('vec must be a vector')
+    inplace:
+    outplace: y0 = x0 @ x1
+  backward:
+    common:
+    gradient:
+      0: grad0 = g0[:,None] @ x1[None]
+      1: grad1 = x0.T @ g0
+
+Bmm:
+  comment: This is different from torch bmm. It deals with all cases of matmul except when matrices are 1D/2D
+  params:
+  forward:
+    common:
+    inplace:
+    outplace: y0 = x0 @ x1
+  backward:
+    common:
+    gradient:
+      0: grad0 = reverse_broadcast(g0 @ x1.swapaxes(-1, -2), x0.shape)
+      1: grad1 = reverse_broadcast(x0.swapaxes(-1, -2) @ g0, x1.shape)
+
+Addmm:
+  comment:
+  params: alpha, beta
+  forward:
+    common: |
+      if x1.ndim != 2:
+          raise RuntimeError(f'mat1 must be a matrix, got {x1.ndim}-D tensor')
+      if x2.ndim != 2:
+          raise RuntimeError(f'mat2 must be a matrix, got {x2.ndim}-D tensor')
+    inplace:
+    outplace: y0 = alpha * (x1 @ x2) if beta == 0 else beta * x0 + alpha * (x1 @ x2)
+  backward:
+    common:
+    gradient:
+      0: grad0 = reverse_broadcast(g0, x0.shape)
+      1: grad1 = g0 @ x2.T
+      2: grad2 = x1.T @ g0
+
+Sum:
+  comment:
+  params: dim, keepdim
+  forward:
+    common:
+    inplace:
+    outplace: y0 = xp.sum(x0, axis=dim, keepdims=keepdim)
+  backward:
+    common:
+    gradient: |
+      if dim is None:
+          grad0 = xp.lib.stride_tricks.as_strided(g0, shape=x0.shape, strides=(0,) * x0.ndim)
+      else:
+          if dim.__class__ is not tuple:
+              dim = (dim,)
+          if not keepdim:
+              g0 = xp.expand_dims(g0, dim)
+          strides = list(g0.strides)
+          for i in dim:
+              strides[i] = 0  # repeat along axis in x.shape
+          grad0 = xp.lib.stride_tricks.as_strided(g0, shape=x0.shape, strides=strides)
+
+Mean:
+  comment:
+  params: dim, keepdim
+  forward:
+    common:
+    inplace:
+    outplace: y0 = xp.mean(x0, axis=dim, keepdims=keepdim)
+  backward:
+    common:
+    gradient: |
+      if dim is None:
+          grad0 = xp.lib.stride_tricks.as_strided(
+              xp.divide(g0, x0.size, dtype=g0.dtype), shape=x0.shape, strides=(0,) * x0.ndim
+          )
+      else:
+          if dim.__class__ is not tuple:
+              dim = (dim,)
+          if not keepdim:
+              g0 = xp.expand_dims(g0, dim)
+          N = 1
+          strides = list(g0.strides)
+          for i in dim:
+              N *= x0.shape[i]
+              strides[i] = 0  # repeat along axis in x.shape
+          grad0 = xp.lib.stride_tricks.as_strided(xp.divide(g0, N, dtype=g0.dtype), shape=x0.shape, strides=strides)
+
+Var:
+  comment:
+  params: dim, keepdim, unbiased
+  forward:
+    common:
+    inplace:
+    outplace: y0 = xp.var(x0, axis=dim, ddof=unbiased, keepdims=keepdim)
+  backward:
+    common:
+    gradient: |
+      if not keepdim:
+          g0 = xp.expand_dims(g0, dim)
+      mean = xp.mean(x0, axis=dim, keepdims=True)
+      if dim is None:
+          N = x0.size
+      else:
+          if dim.__class__ is not tuple:
+              dim = (dim,)
+          N = 1
+          for i in dim:
+              N *= x0.shape[i]
+      grad0 = 2 * g0 * xp.divide(x0 - mean, N - unbiased, dtype=g0.dtype)
+

@@ -1,8 +1,8 @@
 import warnings
 
 from tortto import np, cp, cparray
-from .autograd.grad_ufunc import *
 from .autograd.grad_fcn import *
+from .autograd.grad_fcn_misc import *
 
 def manual_seed(seed):
     np.random.seed(seed)
@@ -318,6 +318,7 @@ def minimum(input, other):
 
 def permute(input, dims):
     return Permute.apply(input, dims=dims)
+
 def moveaxis(input, source, destination):
     ndim = input.ndim
     if not -ndim <= source <= (ndim - 1):
@@ -358,6 +359,19 @@ def matmul(input, other):
     if input.ndim == 0 or other.ndim == 0:
         raise RuntimeError(
             f'both arguments to matmul need to be at least 1D, but they are {input.ndim}D and {other.ndim}D')
+    if input.ndim==2:
+        if other.ndim==2:
+            return Mm.apply(input, other)
+        elif other.ndim==1:
+            return Mv.apply(input, other)
+        else: # x @ y = (y.T @ x.T).T where T is transpose of the last 2 dims
+            input_T = Transpose.apply(input, dim0=-1, dim1=-2)
+            other_T = Transpose.apply(other, dim0=-1, dim1=-2)
+            leading_dims = other_T.shape[:-1]
+            other_T = View.apply(other_T, shape=(-1, other_T.shape[-1]))
+            result = other_T @ input_T
+            result = View.apply(result, shape=(*leading_dims, result.shape[-1]))
+            return Transpose.apply(result, dim0=-1, dim1=-2)
     if other.ndim==2:
         if input.ndim==2:
             return Mm.apply(input,other)
@@ -365,12 +379,11 @@ def matmul(input, other):
             return Mm.apply(input[None],other)[0]
         else:
             leading_dims=input.shape[:-1]
-            collapse_leading = View.apply(input, shape=(-1, input.shape[-1]))
-            result = Mm.apply(collapse_leading, other)
+            input = View.apply(input, shape=(-1, input.shape[-1]))
+            result = Mm.apply(input, other)
             return View.apply(result, shape=(*leading_dims, result.shape[-1]))
-    if input.ndim==2 and other.ndim==1:
-        return Mv.apply(input,other)
     return Bmm.apply(input,other)
+
 def addmm(input, mat1, mat2, *, beta=1, alpha=1):
     return Addmm.apply(input, mat1, mat2, beta=beta, alpha=alpha)
 def sum(input, dim=None, keepdim=False):
