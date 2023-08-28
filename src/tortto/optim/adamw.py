@@ -1,4 +1,4 @@
-from tortto import *
+from tortto import np, cp, cparray
 from . import _functional as F
 from .optimizer import Optimizer
 

@@ -124,7 +124,7 @@ class _ConvTransposeNd(_ConvNd):
             if len(output_size) != k:
                 raise ValueError(
                     "output_size must have {} or {} elements (got {})"
-                        .format(k, k + 2, len(output_size)))
+                    .format(k, k + 2, len(output_size)))
 
             min_sizes = []
             max_sizes = []

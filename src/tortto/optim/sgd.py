@@ -1,4 +1,3 @@
-from tortto import *
 from . import _functional as F
 from .optimizer import Optimizer, required
 
@@ -37,7 +36,7 @@ class SGD(Optimizer):
             for p in group['params']:
                 # default is 0, if p has grad, then grad is numpy/cupy array
                 if p.grad.__class__ is not int:
-                # if isinstance(p.grad, cp.ndarray):
+                    # if isinstance(p.grad, cp.ndarray):
                     params_with_grad.append(p)
                     d_p_list.append(p.grad)
                     state = self.state[p]

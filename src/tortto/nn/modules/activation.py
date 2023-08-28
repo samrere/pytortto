@@ -33,6 +33,7 @@ class ReLU(Module):
         inplace_str = 'inplace=True' if self.inplace else ''
         return inplace_str
 
+
 class LeakyReLU(Module):
     def __init__(self, negative_slope=1e-2, inplace=False):
         super(LeakyReLU, self).__init__()
@@ -46,14 +47,19 @@ class LeakyReLU(Module):
         inplace_str = ', inplace=True' if self.inplace else ''
         return f'negative_slope={self.negative_slope}{inplace_str}'
 
+
 class GELU(Module):
-    def __init__(self, approximate= 'none'):
+    def __init__(self, approximate='none'):
         super(GELU, self).__init__()
         self.approximate = approximate
+
     def forward(self, input):
         return F.gelu(input, approximate=self.approximate)
+
     def extra_repr(self):
         return 'approximate={}'.format(repr(self.approximate))
+
+
 class Softmax(Module):
     def __init__(self, dim):
         super().__init__()
@@ -76,6 +82,7 @@ class LogSoftmax(Module):
 
     def extra_repr(self):
         return f'dim={self.dim}'
+
 
 class MultiheadAttention(Module):
     __constants__ = ['batch_first']
@@ -138,7 +145,8 @@ class MultiheadAttention(Module):
         if self.bias_v is not None:
             xavier_normal_(self.bias_v)
 
-    def forward(self, query, key, value, key_padding_mask = None, need_weights = True, attn_mask = None, average_attn_weights = True):
+    def forward(self, query, key, value, key_padding_mask=None, need_weights=True, attn_mask=None,
+                average_attn_weights=True):
 
         is_batched = query.dim() == 3
         if self.batch_first and is_batched:

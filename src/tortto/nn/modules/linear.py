@@ -4,12 +4,14 @@ from .module import *
 from .. import functional as F
 from .. import init
 
+
 class Identity(Module):
     def __init__(self, *args, **kwargs):
         super(Identity, self).__init__()
 
     def forward(self, x):
         return x
+
 
 class Linear(Module):
     def __init__(self, in_features, out_features, bias=True):

@@ -954,7 +954,7 @@ class Mv(Function):
         req_grad = ctx.needs_input_grad
         grad0, grad1 = None, None
         if req_grad[0]:
-            grad0 = g0[:,None] @ x1[None]
+            grad0 = g0[:, None] @ x1[None]
         if req_grad[1]:
             grad1 = x0.T @ g0
         return grad0, grad1
@@ -1128,3 +1128,128 @@ class Var(Function):
                 N *= x0.shape[i]
         grad0 = 2 * g0 * xp.divide(x0 - mean, N - unbiased, dtype=g0.dtype)
         return grad0
+
+
+class CopySlices(Function):
+    @staticmethod
+    def forward(ctx, *inputs, **params):
+        xt0, xt1 = inputs
+        x0, x1 = xt0.data, xt1.data
+        key = params['key']
+        flag = None
+        if x0.__class__ is cparray and x1.__class__ is not cparray:
+            x1 = cp.array(x1)
+            flag = True
+        elif x0.__class__ is not cparray and x1.__class__ is cparray:
+            x1 = x1.get()
+            flag = False
+        inplace_precheck(xt0)
+        x0[key] = x1
+        yt0 = inplace_update(xt0, ctx)
+        ctx.params['arrays'] = flag if ctx.needs_input_grad[1] else None
+        ctx.params['property'] = x1.shape
+        return yt0
+
+    @staticmethod
+    def backward(ctx, *grad_outputs):
+        g0, = grad_outputs
+        flag = ctx.params['arrays']
+        x1_shape = ctx.params['property']
+        key = ctx.params['key']
+        req_grad = ctx.needs_input_grad
+        grad0, grad1 = None, None
+        if req_grad[1]:
+            # grad for value. Do this first because gd0 will be changed inplace next
+            grad1 = reverse_broadcast(g0[key], x1_shape)
+            if flag is True:
+                grad1 = grad1.get()
+            elif flag is False:
+                grad1 = cp.array(grad1)
+        if req_grad[0]:
+            grad0 = g0  # grad for input
+            grad0[key] = 0
+        return grad0, grad1
+
+
+class Copy(Function):
+    @staticmethod
+    def forward(ctx, *inputs, **params):
+        xt0, xt1 = inputs
+        x0, x1 = xt0.data, xt1.data
+        flag = None
+        if x0.__class__ is cparray and x1.__class__ is not cparray:
+            x1 = cp.array(x1)
+            flag = True
+        elif x0.__class__ is not cparray and x1.__class__ is cparray:
+            x1 = x1.get()
+            flag = False
+        inplace_precheck(xt0)
+        x0[...] = x1
+        yt0 = inplace_update(xt0, ctx)
+        ctx.params['arrays'] = flag if ctx.needs_input_grad[1] else None
+        return yt0
+
+    @staticmethod
+    def backward(ctx, *grad_outputs):
+        g0, = grad_outputs
+        flag = ctx.params['arrays']
+        req_grad = ctx.needs_input_grad
+        grad0, grad1 = None, None
+        if req_grad[1]:
+            # grad for value. Do this first because gd0 will be changed inplace next
+            grad1 = g0
+            if flag is True:
+                grad1 = grad1.get()
+            elif flag is False:
+                grad1 = cp.array(grad1)
+        if req_grad[0]:
+            grad0 = g0  # grad for input
+            grad0[...] = 0
+        return grad0, grad1
+
+
+class MaskedFill(Function):
+    @staticmethod
+    def forward(ctx, *inputs, **params):
+        xt0, xt1 = inputs
+        x0, x1 = xt0.data, xt1.data
+        mask = params['mask']
+        if x1.ndim > 0:
+            raise RuntimeError(f"masked_fill only supports a 0-dimensional value tensor, "
+                               f"but got tensor with {x1.ndim} dimension(s).")
+        if mask.dtype.type is not np.bool_:
+            raise RuntimeError(f"dtype of mask must be bool. Pass dtype=bool when constructing mask")
+        flag = False
+        if x0.__class__ is cparray and x1.__class__ is not cparray:  # xd1 is a scaler, no need to convert it to cparray
+            flag = True
+        elif x0.__class__ is not cparray and x1.__class__ is cparray:
+            raise RuntimeError(f"masked_fill: Expected inputs to be on same device")
+        key = (slice(None),) * (x0.ndim - mask.ndim) + (mask.data,)
+        if params['inplace']:
+            inplace_precheck(xt0)
+            x0[key] = x1
+            yt0 = inplace_update(xt0, ctx)
+        else:
+            y0 = x0.copy()
+            y0[key] = x1
+            yt0 = build_links(y0, grad_fn=ctx)
+        ctx.params['arrays'] = flag if ctx.needs_input_grad[1] else None
+        return yt0
+
+    @staticmethod
+    def backward(ctx, *grad_outputs):
+        g0, = grad_outputs
+        flag = ctx.params['arrays']
+        mask = ctx.params['mask']
+        req_grad = ctx.needs_input_grad
+        leading = (slice(None),) * (g0.ndim - mask.ndim)
+        key = leading + (mask.data,)
+        grad0, grad1 = None, None
+        if req_grad[1]:
+            grad1 = g0[key].sum()
+            if flag:
+                grad1 = grad1.get()
+        if req_grad[0]:
+            grad0 = g0
+            grad0[key] = 0
+        return grad0, grad1

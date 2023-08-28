@@ -1,8 +1,9 @@
+import warnings
 from collections import defaultdict
 import collections.abc
-
-from tortto import *
+from tortto import Tensor, np, cp, cparray
 from itertools import chain
+
 
 class _RequiredParameter(object):
     def __repr__(self):
@@ -67,11 +68,13 @@ class Optimizer(object):
             packed['params'] = [param_mappings[id(p)] for p in group['params']]
             start_index += len(packed['params'])
             return packed
+
         param_groups = [pack_group(g) for g in self.param_groups]
+
         # Remap state to use order indices as keys
         # convert arrays to numpy array (always saves using numpy array, to be consistent to nn.Module)
-        def convert_to_numpy(adict): # i.e. {'momentum_buffer': some cupy array}
-            return {k:v.get() if hasattr(v,'device') else v for k,v in adict.items()}
+        def convert_to_numpy(adict):  # i.e. {'momentum_buffer': some cupy array}
+            return {k: v.get() if hasattr(v, 'device') else v for k, v in adict.items()}
 
         packed_state = {(param_mappings[id(k)] if isinstance(k, Tensor) else k): convert_to_numpy(v)
                         for k, v in self.state.items()}
@@ -79,7 +82,6 @@ class Optimizer(object):
             'state': packed_state,
             'param_groups': param_groups,
         }
-
 
     def load_state_dict(self, state_dict):
         # deepcopy, to be consistent with module API
@@ -133,6 +135,7 @@ class Optimizer(object):
         def update_group(group, new_group):
             new_group['params'] = group['params']
             return new_group
+
         param_groups = [
             update_group(g, ng) for g, ng in zip(groups, saved_groups)]
         self.__setstate__({'state': state, 'param_groups': param_groups})

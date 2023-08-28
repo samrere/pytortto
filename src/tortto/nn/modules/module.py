@@ -30,7 +30,7 @@ class Module:
         self.training = True
         self._parameters = OrderedDict()
         self._modules = OrderedDict()
-        self._buffers = OrderedDict() # used in batchnorm layers to track the mean and std
+        self._buffers = OrderedDict()  # used in batchnorm layers to track the mean and std
 
     def _check_shape_mismatch(self, input_param, param):
         # should be overwritten if parameter dims changes after initialization
@@ -118,7 +118,8 @@ class Module:
         for name, buf in self._buffers.items():
             if buf is not None:
                 buf_data = buf.data
-                destination[prefix + name] = buf_data.get() if buf_data.__class__ is cparray else buf_data.view(np.ndarray)
+                destination[prefix + name] = buf_data.get() if buf_data.__class__ is cparray else buf_data.view(
+                    np.ndarray)
 
     def state_dict(self, destination=None, prefix=''):
         if destination is None:
@@ -275,8 +276,6 @@ class Module:
 
     __call__ = _call_impl
 
-    #############################################
-
     def named_modules(self, memo=None, prefix=''):
         if memo is None:
             memo = set()
@@ -306,7 +305,7 @@ class Module:
             yield module
 
     def _named_members(self, get_members_fn, prefix='', recurse=True):
-        r"""Helper method for yielding various names + members of modules."""
+        """Helper method for yielding various names + members of modules."""
         memo = set()
         modules = self.named_modules(prefix=prefix) if recurse else [(prefix, self)]
         for module_prefix, module in modules:

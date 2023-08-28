@@ -2,6 +2,7 @@ imports: |
   from .function import *
   from .helper import *
   from tortto import np, cp, cparray
+
 Sqrt:
   comment:
   params:
@@ -495,7 +496,7 @@ Mv:
   backward:
     common:
     gradient:
-      0: grad0 = g0[:,None] @ x1[None]
+      0: grad0 = g0[:, None] @ x1[None]
       1: grad1 = x0.T @ g0
 
 Bmm:
@@ -600,3 +601,91 @@ Var:
               N *= x0.shape[i]
       grad0 = 2 * g0 * xp.divide(x0 - mean, N - unbiased, dtype=g0.dtype)
 
+CopySlices:
+  comment:
+  params: key
+  forward:
+    common: |
+      flag = None
+      if x0.__class__ is cparray and x1.__class__ is not cparray:
+          x1 = cp.array(x1)
+          flag = True
+      elif x0.__class__ is not cparray and x1.__class__ is cparray:
+          x1 = x1.get()
+          flag = False
+    inplace: x0[key] = x1
+    outplace:
+  backward:
+    common:
+    gradient:
+      1: |
+        # grad for value. Do this first because gd0 will be changed inplace next
+        grad1 = reverse_broadcast(g0[key], x1.shape)
+        if flag is True:
+            grad1 = grad1.get()
+        elif flag is False:
+            grad1 = cp.array(grad1)
+      0: |
+        grad0 = g0  # grad for input
+        grad0[key] = 0
+
+Copy:
+  comment:
+  params:
+  forward:
+    common: |
+      flag = None
+      if x0.__class__ is cparray and x1.__class__ is not cparray:
+          x1 = cp.array(x1)
+          flag = True
+      elif x0.__class__ is not cparray and x1.__class__ is cparray:
+          x1 = x1.get()
+          flag = False
+    inplace: x0[...] = x1
+    outplace:
+  backward:
+    common:
+    gradient:
+      1: |
+        # grad for value. Do this first because gd0 will be changed inplace next
+        grad1 = g0
+        if flag is True:
+            grad1 = grad1.get()
+        elif flag is False:
+            grad1 = cp.array(grad1)
+      0: |
+        grad0 = g0  # grad for input
+        grad0[...] = 0
+
+MaskedFill:
+  comment:
+  params: mask
+  forward:
+    common: |
+      if x1.ndim > 0:
+          raise RuntimeError(f"masked_fill only supports a 0-dimensional value tensor, "
+                             f"but got tensor with {x1.ndim} dimension(s).")
+      if mask.dtype.type is not np.bool_:
+          raise RuntimeError(f"dtype of mask must be bool. Pass dtype=bool when constructing mask")
+      flag = False
+      if x0.__class__ is cparray and x1.__class__ is not cparray:  # xd1 is a scaler, no need to convert it to cparray
+          flag = True
+      elif x0.__class__ is not cparray and x1.__class__ is cparray:
+          raise RuntimeError(f"masked_fill: Expected inputs to be on same device")
+      key = (slice(None),) * (x0.ndim - mask.ndim) + (mask.data,)
+    inplace: x0[key] = x1
+    outplace: |
+      y0 = x0.copy()
+      y0[key] = x1
+  backward:
+    common: |
+      leading = (slice(None),) * (g0.ndim - mask.ndim)
+      key = leading + (mask.data,)
+    gradient:
+      1: |
+        grad1 = g0[key].sum()
+        if flag:
+            grad1 = grad1.get()
+      0: |
+        grad0 = g0
+        grad0[key] = 0

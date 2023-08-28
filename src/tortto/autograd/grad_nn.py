@@ -1,7 +1,6 @@
 import math
 from tortto import *
 
-
 """
 datatype inconsistencies in cupy:
 1. a small float32 / large int will result in float64:
@@ -10,8 +9,6 @@ datatype inconsistencies in cupy:
     y.dtype --> float64
 """
 
-
-
 scipy_is_loaded = bool(find_spec('scipy'))
 sparse_is_loaded = cupy_is_loaded or scipy_is_loaded
 if cupy_is_loaded:
@@ -19,12 +16,10 @@ if cupy_is_loaded:
     import cupyx.scipy.special as cp_special
     import cupyx.scipy.sparse as cp_sparse
 
-#
 SQRT_PI={float16: float16(math.sqrt(math.pi)), float32: float32(math.sqrt(math.pi)), float64: float64(math.sqrt(math.pi))}
 SQRT_2 = {float16: float16(math.sqrt(2)), float32: float32(math.sqrt(2)), float64: float64(math.sqrt(2))}
 SQRT_2_over_PI = {float16: float16(math.sqrt(2 / math.pi)), float32: float32(math.sqrt(2 / math.pi)),
                   float64: float64(math.sqrt(2 / math.pi))}
-
 
 # if scipy is present, replace default numpy functions to scipy
 if scipy_is_loaded:
@@ -181,7 +176,6 @@ class BinaryCrossEntropy(Function):
         xd0, xd1 = xt0.data, xt1.data
         reduction = params['reduction']
         weight = params['weight']
-        requires_grad = xt0.requires_grad | xt1.requires_grad
         if xd0.shape != xd1.shape:
             warnings.warn(f"Using a target size ({xd1.shape}) that is different to the input size ({xd0.shape}). "
                           "This will likely lead to incorrect results due to broadcasting. "
@@ -438,7 +432,7 @@ class ConstantPad(Function):
         grad0 = gd0[selection]
         return grad0
 
-########### Conv2d @ ConvTransposed2d
+########### Conv2d and ConvTransposed2d
 
 def _strided_split(xp, arr, split_axis, groups):
     group_size = arr.shape[split_axis] // groups

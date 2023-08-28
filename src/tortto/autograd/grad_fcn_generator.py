@@ -65,10 +65,11 @@ class Config:
         self.name = name
         self.config = config
         self.params = self.parse_params()
-        self.backward_combined, self.backward_common, self.gradient = self.parse_backward()
+        self.backward_combined, self.backward_common, self.gradient, self.gradient_order = self.parse_backward()
         self.forward_combined, self.gradient_combined, self.forward_common, self.allow_inplace, \
         self.inplace, self.outplace, self.inputs, self.outputs, \
         self.saved_tensors, self.saved_arrays, self.saved_property = self.parse_forward()
+
     def parse_params(self):
         params = get(self.config, 'params', '')
         if params:
@@ -84,18 +85,21 @@ class Config:
         backward_common = get(self.config['backward'], 'common', '').strip()
 
         gradient_load = get(self.config['backward'], 'gradient', dict())
-
+        gradient_order = []
         if type(gradient_load) is dict:
             gradient = [''] * len(gradient_load)
             for id, code in gradient_load.items():
+                order = set(re.findall(r'(?<=\n)grad(\d)(?=\s*?=)', '\n' + code))
+                if len(order) != 1:
+                    raise RuntimeError(f'{self.name}: number of gradient output at {id} should be 1')
+                gradient_order.append(int(list(order)[0]))
                 gradient[id] = code
         else:  # it's string
             gradient = [gradient_load.strip()]
 
         backward_combined = '\n' + ('\n'.join([backward_common] + gradient) if backward_common else '\n'.join(gradient))
 
-
-        return backward_combined, backward_common, gradient
+        return backward_combined, backward_common, gradient, gradient_order
 
     def parse_forward(self):
         forward_common = get(self.config['forward'], 'common', '')
@@ -117,7 +121,7 @@ class Config:
         else:
             outplace = [outplace_load.strip()]
 
-        forward_combined = '\n'+ forward_common + '\n'.join(inplace + outplace)
+        forward_combined = '\n' + forward_common + '\n'.join(inplace + outplace)
         inputs = re.findall(r'(?<!\w)(x\d)(?!\w)', forward_combined)  # find inputs such as x0, x1
         inputs = set(inputs)
         outputs = set(f'y{i}' for i in range(max(len(inplace), len(outplace))))
@@ -128,23 +132,26 @@ class Config:
             clean = {i for i in aset if re.search(rf'(?<!\w)({i}(?!\.))(?!\w)', string)}  # such as x0
             T = {i for i in aset if re.search(rf'(?<!\w){i}\.T(?!\w)', string)}  # such as x0.T
             T = {i.split('.')[0] for i in T}
-            class_methods = {i for i in aset if re.search(rf'(?<!\w){i}\.[a-z]+?\((?!\w)', string)}  # such as x0.transpose()
+            class_methods = {i for i in aset if
+                             re.search(rf'(?<!\w){i}\.[a-z]+?\((?!\w)', string)}  # such as x0.transpose()
             class_methods = {i.split('.')[0] for i in class_methods}
-            return clean|T|class_methods
+            return clean | T | class_methods
 
         # get saved tensor, tensor property and interm_result
         all_tensors = inputs | outputs
         saved_tensors = []
+        redefined = set(re.findall(r'(?<=\n)(\w*?)(?=\s*?=)',
+                                   '\n' + self.backward_common))  # tensors or arrays redefined in backward common
         for _ in range(len(self.gradient)):
-            saved_tensors.append(search_tensorarray(all_tensors, self.gradient[_]))
-        saved_tensors.append(search_tensorarray(all_tensors, self.backward_common))# same search from backward_common
+            saved_tensors.append(search_tensorarray(all_tensors, self.gradient[_]) - redefined)
+        saved_tensors.append(
+            search_tensorarray(all_tensors, self.backward_common) - redefined)  # same search from backward_common
 
-        all_result_arrays = set(re.findall(r'(?<=\n)(\w*?)(?=\s*?=)', forward_combined)) - all_tensors  # exclude all tensors
+        all_result_arrays = set(re.findall(r'(?<=\n)(\w*?)(?=\s*?=)', forward_combined)) - all_tensors - redefined
         saved_arrays = []
         for _ in range(len(self.gradient)):
             saved_arrays.append(search_tensorarray(all_result_arrays, self.gradient[_]))
         saved_arrays.append(search_tensorarray(all_result_arrays, self.backward_common))
-
 
         saved_property = []
         saved_tensors_inclu_common = [saved_tensors[i] | saved_tensors[-1] for i in range(len(saved_tensors))]
@@ -155,7 +162,7 @@ class Config:
                 {
                     i for i in re.findall(r'(?<!\w)(?:(?<!\.)\w+?)\.(?:[a-z]+?)(?![.(\w])', self.gradient[_])
                     if (i.split('.')[0] not in saved_tensors_inclu_common[_] | saved_arrays_inclu_common[_])
-                    and (i.split('.')[0] in all_result_arrays | all_tensors)
+                       and (i.split('.')[0] in all_result_arrays | all_tensors)
                 }
             )
 
@@ -259,14 +266,12 @@ class Config:
             else:
                 c(f"{', '.join(self.saved_arrays)} = ctx.params['arrays']")
 
-
     def save_property_to_text(self):
         if self.saved_property:
             if len(self.saved_property) == 1:
                 c(f"ctx.params['property'] = {self.saved_property[0]}")
             else:
                 c(f"ctx.params['property'] = ({', '.join(self.saved_property)})")
-
 
     def load_property_to_text(self):
         saved_property = ['_'.join(p.split('.')) for p in self.saved_property]
@@ -309,11 +314,12 @@ class Config:
                     c(f"x0 = ctx.params['copy']")
                     return True
 
+
 def shorten_needs_input_grad():
-    string_original = re.search(r'(##)([.\w\W]*?)(##)',to_save[0]).group(2)
-    counter = len(re.findall(r'ctx.needs_input_grad\[',string_original))
-    if counter>=2:
-        string = re.sub(r'\$\$req_grad\$\$\n','req_grad = ctx.needs_input_grad\n',string_original)
+    string_original = re.search(r'(##)([.\w\W]*?)(##)', to_save[0]).group(2)
+    counter = len(re.findall(r'ctx.needs_input_grad\[', string_original))
+    if counter >= 2:
+        string = re.sub(r'\$\$req_grad\$\$\n', 'req_grad = ctx.needs_input_grad\n', string_original)
         string = re.sub(r'ctx.needs_input_grad\[', 'req_grad[', string)
     else:
         string = re.sub(r'\s*?\$\$req_grad\$\$', '', string_original)
@@ -321,13 +327,12 @@ def shorten_needs_input_grad():
     to_save[0] = re.sub(r'##([.\w\W]*?)##', string, to_save[0])
 
 
-
-def generate_grad_func(fn):
+def generate_grad_func(input_fn, output_fn):
     # import os
-    # if os.path.exists(f'{Path(__file__).parent}/grad_fcn.py'):
+    # if os.path.exists(f'{Path(__file__).parent}/{output_fn}'):
     #     return
     global to_save
-    with open(rf'{Path(__file__).parent}/grad_fcn_config.yaml') as file:
+    with open(rf'{Path(__file__).parent}/{input_fn}') as file:
         yml = yaml.load(file, Loader=yaml.FullLoader)
         c(yml['imports'])
         newline()
@@ -357,13 +362,17 @@ def generate_grad_func(fn):
                     parse.load_xp(parse.forward_combined)
                     c(parse.forward_common)
                     if parse.allow_inplace:
-                        with indent(f"if params['inplace']:"):
+                        if parse.outplace:
+                            with indent(f"if params['inplace']:"):
+                                parse.inplace_write_to_text()
+                                parse.save_tensors_to_text(is_inplace=True)
+                            with indent('else:'):
+                                parse.outplace_write_to_text()
+                                parse.save_tensors_to_text(is_inplace=False)
+                                # do not write anything on this line
+                        else:
                             parse.inplace_write_to_text()
                             parse.save_tensors_to_text(is_inplace=True)
-                        with indent('else:'):
-                            parse.outplace_write_to_text()
-                            parse.save_tensors_to_text(is_inplace=False)
-                            # do not write anything on this line
                     else:
                         parse.outplace_write_to_text()
                         parse.save_tensors_to_text(is_inplace=False)
@@ -389,15 +398,18 @@ def generate_grad_func(fn):
                         c(parse.backward_common)
                         c(f"{', '.join(f'grad{i}' for i in range(len(parse.gradient)))} = "
                           f"{', '.join('None' for _ in range(len(parse.gradient)))}")
-                        for i, code in enumerate(parse.gradient):
-                            with indent(f"if req_grad[{i}]:"):
+                        for i in range(len(parse.gradient)):
+                            order = parse.gradient_order[i]
+                            with indent(f"if req_grad[{order}]:"):
+                                code = parse.gradient[order]
                                 if not x0_is_loaded:
                                     parse.need_x0_copy(code)
                                 c(code)
+
                     c(f"return {', '.join(f'grad{i}' for i in range(len(parse.gradient)))}")
             newline(2)
-        finished(fn)
+        finished(output_fn)
 
 
 if __name__ == '__main__':
-    generate_grad_func('grad_fcn.py')
+    generate_grad_func('grad_fcn_config.yaml', 'grad_fcn.py')

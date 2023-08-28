@@ -5,16 +5,15 @@ import os
 os.environ['CUPY_TF32']='1' # only available on GPUs with compute capability 8.0 or higher
 os.environ['CUPY_ACCELERATORS']='cub'
 """
+import configparser
+
+config = configparser.ConfigParser()
+config.read('../setup.cfg')
+__version__ = config['metadata']['version']
 
 from .xparray import *
-
-__version__ = '1.3.0'
-
-
-
 from .tensor import *
 from .VariableFunctions import *
 from .serialization import *
 from . import nn
 from . import optim
-

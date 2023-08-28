@@ -7,6 +7,7 @@ def _ntuple(n):
         if isinstance(x, Iterable):
             return x[:n]
         return tuple(repeat(x, n))
+
     return parse
 
 

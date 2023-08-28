@@ -4,8 +4,10 @@ from tortto import np, cp, cparray
 from .autograd.grad_fcn import *
 from .autograd.grad_fcn_misc import *
 
+
 def manual_seed(seed):
     np.random.seed(seed)
+
 
 def empty_like(tensor, dtype=None, requires_grad=False):
     xd0 = tensor.data
@@ -89,18 +91,15 @@ def linspace(start, end, steps, dtype=None, requires_grad=False):
     if dtype is None:
         dtype = tt.float32
     value = np.linspace(start, end, steps, dtype=dtype)
-    return tt.Tensor(value , dtype=dtype, requires_grad=requires_grad)
+    return tt.Tensor(value, dtype=dtype, requires_grad=requires_grad)
 
 
 def tensor(data, requires_grad=False, dtype=None, copy=True, **kwargs):
-
     if isinstance(data, tt.Tensor):
         warnings.warn('Input is already a tensor, returning without deepcopy', UserWarning)
     else:
         if dtype is None:
             dtype = getattr(data, 'dtype', tt.float32)
-        if 'grad_fn' in kwargs and not requires_grad:
-            kwargs['grad_fn'] = None
         ## if data is not nparray nor cparray, _version will be reset to [0]
         result = tt.Tensor(data, requires_grad=requires_grad, dtype=dtype, copy=copy, **kwargs)
         return result
@@ -163,9 +162,6 @@ def argmin(x, dim=None, keepdim=False):
         return tt.tensor(x.data.argmin(axis=dim), dtype=tt.int64)
 
 
-"""
-start: from grad_ufunc
-"""
 def sqrt(input):
     return Sqrt.apply(input, inplace=False)
 
@@ -207,7 +203,11 @@ def sigmoid_(input):
 
 
 def sign(input):
-    return Sign.apply(input)
+    return Sign.apply(input, inplace=False)
+
+
+def sign_(input):
+    return Sign.apply(input, inplace=True)
 
 
 def neg(input):
@@ -287,11 +287,14 @@ def div(input, other):
 
 divide = div
 
+
 def clamp(input, min=None, max=None):
     return Clamp.apply(input, min=min, max=max, inplace=False)
 
+
 def clamp_(input, min=None, max=None):
     return Clamp.apply(input, min=min, max=max, inplace=True)
+
 
 def max(input, dim=None, keepdim=False):
     if dim.__class__ is input.__class__:
@@ -302,6 +305,7 @@ def max(input, dim=None, keepdim=False):
         else:
             return Max0.apply(input, dim=dim, keepdim=keepdim)
 
+
 def min(input, dim=None, keepdim=False):
     if dim.__class__ is input.__class__:
         return Minimum.apply(input, dim)
@@ -310,14 +314,19 @@ def min(input, dim=None, keepdim=False):
             return Min1.apply(input)
         else:
             return Min0.apply(input, dim=dim, keepdim=keepdim)
+
+
 def maximum(input, other):
     return Maximum.apply(input, other)
+
 
 def minimum(input, other):
     return Minimum.apply(input, other)
 
+
 def permute(input, dims):
     return Permute.apply(input, dims=dims)
+
 
 def moveaxis(input, source, destination):
     ndim = input.ndim
@@ -332,39 +341,41 @@ def moveaxis(input, source, destination):
     dims.insert(destination, dims.pop(source))
     return Permute.apply(input, dims=dims)
 
+
 def transpose(input, dim0, dim1):
     return Transpose.apply(input, dim0=dim0, dim1=dim1)
-swapaxes=transpose
-swapdims=transpose
-"""
-end: from grad_ufunc
-"""
 
 
-"""
-start: from grad_fcn
-"""
+swapaxes = transpose
+swapdims = transpose
+
+
 def mm(input, mat2):
     return Mm.apply(input, mat2)
+
+
 def mv(input, vec):
     return Mv.apply(input, vec)
 
+
 def bmm(input, mat1):
     return Bmm.apply(input, mat1)
+
+
 def matmul(input, other):
     """
     use Mm when possible, it's faster to matmul 2D matrices
-    if other is a 2D matrix and input is a nD tensor, collapse all leading dimensions so that input can be 2D
+    if multiply a 2D matrix with a nD tensor, collapse the leading dims of nD tensor to become a 2D matrix
     """
     if input.ndim == 0 or other.ndim == 0:
         raise RuntimeError(
             f'both arguments to matmul need to be at least 1D, but they are {input.ndim}D and {other.ndim}D')
-    if input.ndim==2:
-        if other.ndim==2:
+    if input.ndim == 2:
+        if other.ndim == 2:
             return Mm.apply(input, other)
-        elif other.ndim==1:
+        elif other.ndim == 1:
             return Mv.apply(input, other)
-        else: # x @ y = (y.T @ x.T).T where T is transpose of the last 2 dims
+        else:  # x @ y = (y.T @ x.T).T where T is transpose of the last 2 dims
             input_T = Transpose.apply(input, dim0=-1, dim1=-2)
             other_T = Transpose.apply(other, dim0=-1, dim1=-2)
             leading_dims = other_T.shape[:-1]
@@ -372,53 +383,66 @@ def matmul(input, other):
             result = other_T @ input_T
             result = View.apply(result, shape=(*leading_dims, result.shape[-1]))
             return Transpose.apply(result, dim0=-1, dim1=-2)
-    if other.ndim==2:
-        if input.ndim==2:
-            return Mm.apply(input,other)
-        elif input.ndim==1:
-            return Mm.apply(input[None],other)[0]
+    if other.ndim == 2:
+        if input.ndim == 2:
+            return Mm.apply(input, other)
+        elif input.ndim == 1:
+            return Mm.apply(input[None], other)[0]
         else:
-            leading_dims=input.shape[:-1]
+            leading_dims = input.shape[:-1]
             input = View.apply(input, shape=(-1, input.shape[-1]))
             result = Mm.apply(input, other)
             return View.apply(result, shape=(*leading_dims, result.shape[-1]))
-    return Bmm.apply(input,other)
+    return Bmm.apply(input, other)
+
 
 def addmm(input, mat1, mat2, *, beta=1, alpha=1):
     return Addmm.apply(input, mat1, mat2, beta=beta, alpha=alpha)
+
+
 def sum(input, dim=None, keepdim=False):
     return Sum.apply(input, dim=dim, keepdim=keepdim)
+
+
 def mean(input, dim=None, keepdim=False):
     return Mean.apply(input, dim=dim, keepdim=keepdim)
-def var(input, dim=None, unbiased=True,keepdim=False):
+
+
+def var(input, dim=None, unbiased=True, keepdim=False):
     return Var.apply(input, dim=dim, unbiased=unbiased, keepdim=keepdim)
+
+
 def cat(tensors, dim=0):
     return Cat.apply(*tensors, dim=dim)
+
+
 def split(tensor, split_size_or_sections, dim=0):
     return Split.apply(tensor, split_size_or_sections=split_size_or_sections, dim=dim)
+
+
 def chunk(input, chunks, dim=0):
     dim_size = input.shape[dim]
-    if dim<0:
-        dim+=input.ndim
+    if dim < 0:
+        dim += input.ndim
     chunk_size = dim_size // chunks + (dim_size % chunks != 0)
     return Split.apply(input, split_size_or_sections=chunk_size, dim=dim)
+
+
 def squeeze(input, dim=None):
     return Squeeze.apply(input, dim=dim)
+
+
 def unsqueeze(input, dim):
     return Unsqueeze.apply(input, dim=dim)
+
+
 def masked_fill(input, mask, value):
     if value.__class__ is not tt.Tensor:
-        value=tt.tensor(value, copy=False)
+        value = tt.tensor(value, copy=False)
     return MaskedFill.apply(input, value, mask=mask, inplace=False)
+
+
 def masked_fill_(input, mask, value):
     if value.__class__ is not tt.Tensor:
-        value=tt.tensor(value, copy=False)
+        value = tt.tensor(value, copy=False)
     return MaskedFill.apply(input, value, mask=mask, inplace=True)
-"""
-end: from grad_fcn
-"""
-
-
-
-
-

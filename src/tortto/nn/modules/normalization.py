@@ -5,6 +5,7 @@ from .. import init
 from ..parameter import Parameter
 import numbers
 
+
 class LayerNorm(Module):
     def __init__(self, normalized_shape, eps=1e-5, elementwise_affine=True):
         super(LayerNorm, self).__init__()

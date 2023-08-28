@@ -1,6 +1,7 @@
-from tortto import *
+from tortto import np, cp, cparray
 from . import _functional as F
 from .optimizer import Optimizer
+
 
 class Adam(Optimizer):
     def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-8,
@@ -75,4 +76,3 @@ class Adam(Optimizer):
                    group['lr'],
                    group['weight_decay'],
                    group['eps'])
-

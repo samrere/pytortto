@@ -1,8 +1,11 @@
 from ..autograd.grad_nn import *
 
 _floating_point = {float16, float32, float64}
+
+
 def relu(input, inplace=False):
     return Relu.apply(input, inplace=inplace)
+
 
 def relu_(input):
     return Relu.apply(input, inplace=True)
@@ -10,14 +13,14 @@ def relu_(input):
 
 def leaky_relu(input, negative_slope=0.01, inplace=False):
     return LeakyRelu.apply(input, negative_slope=negative_slope, inplace=inplace)
+
+
 def leaky_relu_(input, negative_slope=0.01):
     return LeakyRelu.apply(input, negative_slope=negative_slope, inplace=True)
 
 
-
 def gelu(input, approximate='none'):
     return Gelu.apply(input, approximate=approximate)
-
 
 
 def mse_loss(input, target, reduction='mean'):
@@ -28,10 +31,8 @@ def binary_cross_entropy(input, target, weight=None, reduction='mean'):
     return BinaryCrossEntropy.apply(input, target, weight=weight, reduction=reduction)
 
 
-
 def binary_cross_entropy_with_logits(input, target, weight=None, pos_weight=None, reduction='mean'):
-    return BinaryCrossEntropyWithLogits.apply(input, target, weight=weight, pos_weight=pos_weight,reduction=reduction)
-
+    return BinaryCrossEntropyWithLogits.apply(input, target, weight=weight, pos_weight=pos_weight, reduction=reduction)
 
 
 def nll_loss(input, target, weight=None, ignore_index=-100, reduction='mean'):
@@ -49,12 +50,13 @@ def log_softmax(input, dim):
 def logsigmoid(input):
     return LogSigmoid.apply(input)
 
+
 def linear(input, weight, bias):
     # https://pytorch.org/docs/stable/generated/torch.nn.Linear.html
     # linear is defined as y=X@A.T+b
     requires_grad = input.requires_grad | weight.requires_grad
     if bias is not None:
-        output = matmul(input, weight.T)+bias
+        output = matmul(input, weight.T) + bias
         requires_grad |= bias.requires_grad
     else:
         output = matmul(input, weight.T)
@@ -75,31 +77,35 @@ def pad(input, pad, mode='constant', value=0.0):
         raise NotImplementedError("TODO: Currently only support mode='constant'")
 
 
-def conv2d(input, weight, bias=None, stride=(1,1), padding=(0,0), dilation=(1,1), groups=1):
-    low_dim=False
-    if input.ndim==3:
-        low_dim=True
-        input=Unsqueeze.apply(input, dim=0)
-    result = Convolution.apply(input, weight, bias,stride=stride,padding=padding, dilation=dilation, groups=groups)
+def conv2d(input, weight, bias=None, stride=(1, 1), padding=(0, 0), dilation=(1, 1), groups=1):
+    low_dim = False
+    if input.ndim == 3:
+        low_dim = True
+        input = Unsqueeze.apply(input, dim=0)
+    result = Convolution.apply(input, weight, bias, stride=stride, padding=padding, dilation=dilation, groups=groups)
     if low_dim:
-        result=Squeeze.apply(result, dim=0)
-    return result
-
-def conv_transpose2d(input, weight, bias=None, stride=(1,1), padding=(0,0), output_padding=(0,0), groups=1, dilation=(1,1)):
-    low_dim=False
-    if input.ndim==3:
-        low_dim=True
-        input=Unsqueeze.apply(input, dim=0)
-    result = TransposedConvolution.apply(input, weight, bias,stride=stride,padding=padding, output_padding=output_padding, dilation=dilation, groups=groups)
-    if low_dim:
-        result=Squeeze.apply(result, dim=0)
+        result = Squeeze.apply(result, dim=0)
     return result
 
 
+def conv_transpose2d(input, weight, bias=None, stride=(1, 1), padding=(0, 0), output_padding=(0, 0), groups=1,
+                     dilation=(1, 1)):
+    low_dim = False
+    if input.ndim == 3:
+        low_dim = True
+        input = Unsqueeze.apply(input, dim=0)
+    result = TransposedConvolution.apply(input, weight, bias, stride=stride, padding=padding,
+                                         output_padding=output_padding, dilation=dilation, groups=groups)
+    if low_dim:
+        result = Squeeze.apply(result, dim=0)
+    return result
 
-def max_pool2d(input, kernel_size, stride=(1,1), padding=(0,0), dilation=(1,1), ceil_mode=False, return_indices=False):
+
+def max_pool2d(input, kernel_size, stride=(1, 1), padding=(0, 0), dilation=(1, 1), ceil_mode=False,
+               return_indices=False):
     return MaxPool2DWithIndices.apply(input, kernel_size=kernel_size, stride=stride, padding=padding,
                                       dilation=dilation, ceil_mode=ceil_mode, return_indices=return_indices)
+
 
 def dropout(input, p=0.5, training=True, inplace=False):
     if p < 0.0 or p > 1.0:
@@ -109,6 +115,7 @@ def dropout(input, p=0.5, training=True, inplace=False):
     else:
         return input
 
+
 def batch_norm(input, running_mean, running_var, weight=None, bias=None, training=False, momentum=0.1, eps=1e-5):
     return BatchNorm.apply(input, weight, bias, running_mean=running_mean, running_var=running_var,
                            training=training, momentum=momentum, eps=eps)
@@ -116,7 +123,6 @@ def batch_norm(input, running_mean, running_var, weight=None, bias=None, trainin
 
 def layer_norm(input, normalized_shape, weight=None, bias=None, eps=1e-5):
     return LayerNorm.apply(input, weight, bias, normalized_shape=normalized_shape, eps=eps)
-
 
 
 def embedding(input, weight, padding_idx=None, max_norm=None, norm_type=2.0, scale_grad_by_freq=False, sparse=False):
@@ -274,9 +280,7 @@ def multi_head_attention_forward(query, key, value, embed_dim_to_check, num_head
         if key_padding_mask is not None:
             key_padding_mask = pad(key_padding_mask, (0, 1))
 
-    #
     # reshape q, k, v for multihead attention and make em batch first
-    #
     # q shape: (tgt,bsz,emb)->(tgt,bsz*num_head,head_dim)->(bsz*num_head,tgt,head_dim)
     q = q.contiguous().view((tgt_len, bsz * num_heads, head_dim)).swapaxes(0, 1)
     k = k.contiguous().view((k.shape[0], bsz * num_heads, head_dim)).swapaxes(0, 1)
@@ -317,9 +321,7 @@ def multi_head_attention_forward(query, key, value, embed_dim_to_check, num_head
         new_attn_mask.masked_fill_(attn_mask, float("-inf"))
         attn_mask = new_attn_mask
 
-    #
     # calculate attention and out projection
-    #
     # attn_output: (bsz*num_head, tgt, E); attn_output_weights: (bsz*num_head, tgt, src)
     attn_output, attn_output_weights = _scaled_dot_product_attention(q, k, v, attn_mask, training, dropout_p)
     # (bsz*num_head,tgt,head)->(tgt,bsz*num_head,head)->(tgt,bsz,head*num_head)==(tgt,bsz,embed_dim)
