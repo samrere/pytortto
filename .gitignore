@@ -1,20 +1,13 @@
 *__pycache__*
 *checkpoint*
-<<<<<<< HEAD
-=======
 *.idea*
-*data*
 *.zip*
->>>>>>> main
 *references*
 *backup*
 *test*
 *MNIST*
-<<<<<<< HEAD
-=======
-*result*
->>>>>>> main
 *Untitled*
+*cifar*
 
 *.idea*
 *.7z
@@ -26,9 +19,3 @@
 *.tar
 *.zip
 *.h5
-<<<<<<< HEAD
-*.zip*
-=======
-*.png
-*.npy
->>>>>>> main
