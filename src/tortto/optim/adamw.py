@@ -1,5 +1,4 @@
-from tortto import *
-from tortto import _int_zero
+from tortto import np, cp, cparray
 from . import _functional as F
 from .optimizer import Optimizer
 
@@ -28,7 +27,7 @@ class AdamW(Optimizer):
             group.setdefault('amsgrad', False)
 
     def step(self):
-        xp = cp if self.param_groups[0]['params'][0].data.__class__ is cp_ndarray else np
+        xp = cp if self.param_groups[0]['params'][0].data.__class__ is cparray else np
         for group in self.param_groups:
             params_with_grad = []
             grads = []
@@ -41,7 +40,7 @@ class AdamW(Optimizer):
             beta1, beta2 = group['betas']
 
             for p in group['params']:
-                if p.grad is not _int_zero:
+                if p.grad is not None:
                     params_with_grad.append(p)
                     grads.append(p.grad)
 

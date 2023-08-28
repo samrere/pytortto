@@ -30,7 +30,7 @@ class Module:
         self.training = True
         self._parameters = OrderedDict()
         self._modules = OrderedDict()
-        self._buffers = OrderedDict() # used in batchnorm layers to track the mean and std
+        self._buffers = OrderedDict()  # used in batchnorm layers to track the mean and std
 
     def _check_shape_mismatch(self, input_param, param):
         # should be overwritten if parameter dims changes after initialization
@@ -54,7 +54,8 @@ class Module:
                                       .format(key, input_param.shape, param.shape))
                     continue
                 try:
-                    param.copy_(input_param)
+                    with tt.no_grad():
+                        param.copy_(input_param)
                 except Exception as ex:
                     error_msgs.append('While copying the parameter named "{}", '
                                       'whose dimensions in the model are {} and '
@@ -109,15 +110,16 @@ class Module:
         for name, param in self._parameters.items():
             if param is not None:
                 param_data = param.data
-                if param_data.__class__ is cp_ndarray:
+                if param_data.__class__ is cparray:
                     destination[prefix + name] = param_data.get()
                 else:
-                    destination[prefix + name] = param_data
+                    destination[prefix + name] = param_data.view(np.ndarray)
 
         for name, buf in self._buffers.items():
             if buf is not None:
                 buf_data = buf.data
-                destination[prefix + name] = buf_data.get() if buf_data.__class__ is cp_ndarray else buf_data
+                destination[prefix + name] = buf_data.get() if buf_data.__class__ is cparray else buf_data.view(
+                    np.ndarray)
 
     def state_dict(self, destination=None, prefix=''):
         if destination is None:
@@ -274,8 +276,6 @@ class Module:
 
     __call__ = _call_impl
 
-    #############################################
-
     def named_modules(self, memo=None, prefix=''):
         if memo is None:
             memo = set()
@@ -305,7 +305,7 @@ class Module:
             yield module
 
     def _named_members(self, get_members_fn, prefix='', recurse=True):
-        r"""Helper method for yielding various names + members of modules."""
+        """Helper method for yielding various names + members of modules."""
         memo = set()
         modules = self.named_modules(prefix=prefix) if recurse else [(prefix, self)]
         for module_prefix, module in modules:
@@ -337,6 +337,11 @@ class Module:
     def eval(self):
         return self.train(False)
 
+    def requires_grad_(self, requires_grad=True):
+        for p in self.parameters():
+            p.requires_grad_(requires_grad)
+        return self
+
     def apply(self, fn):
         for module in self.children():
             module.apply(fn)
@@ -366,7 +371,7 @@ class Module:
             out_param = Parameter(param_applied, param.requires_grad)
             self._parameters[key] = out_param
 
-            if param.grad is not tt._int_zero:
+            if param.grad is not None:
                 with tt.no_grad():
                     # tortto gradient is np/cp array, so need to convert to tensor to apply the function
                     grad_tensor = tt.tensor(param.grad, copy=False)

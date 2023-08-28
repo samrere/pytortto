@@ -1,12 +1,14 @@
 *__pycache__*
-*.ipynb_checkpoints*
+*checkpoint*
 *.idea*
-*cifar10_data*
+*data*
 *.zip*
 *references*
 *backup*
 *test*
 *MNIST*
+*result*
+*Untitled*
 
 *.7z
 *.dmg
@@ -17,3 +19,5 @@
 *.tar
 *.zip
 *.h5
+*.png
+*.npy

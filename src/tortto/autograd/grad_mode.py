@@ -3,11 +3,12 @@ import functools
 import inspect
 from typing import Any, Callable, TypeVar, cast
 
-
 grad_enabled = True
+
 
 def is_grad_enabled():
     return grad_enabled
+
 
 FuncType = Callable[..., Any]
 F = TypeVar('F', bound=FuncType)
@@ -24,14 +25,15 @@ class _DecoratorContextManager:
         def decorate_context(*args, **kwargs):
             with self.__class__():
                 return func(*args, **kwargs)
+
         return cast(F, decorate_context)
 
     def _wrap_generator(self, func):
         """Wrap each generator invocation with the context manager"""
+
         @functools.wraps(func)
         def generator_context(*args, **kwargs):
             gen = func(*args, **kwargs)
-
             # Generators are suspended and unsuspended at `yield`, hence we
             # make sure the grad mode is properly set every time the execution
             # flow returns into the wrapped generator and restored when it
@@ -79,6 +81,7 @@ class _DecoratorContextManager:
     def __exit__(self, exc_type: Any, exc_value: Any, traceback: Any) -> None:
         raise NotImplementedError
 
+
 class set_grad_enabled:
     def __init__(self, mode):
         global grad_enabled
@@ -91,6 +94,7 @@ class set_grad_enabled:
     def __exit__(self, exc_type, exc_val, exc_tb):
         global grad_enabled
         grad_enabled = self.prev
+
 
 class no_grad(_DecoratorContextManager):
     def __init__(self):

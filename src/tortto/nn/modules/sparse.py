@@ -1,4 +1,4 @@
-from tortto import *
+import tortto as tt
 from ..parameter import Parameter
 
 from .module import Module
@@ -26,7 +26,7 @@ class Embedding(Module):
         self.norm_type = norm_type
         self.scale_grad_by_freq = scale_grad_by_freq
         if _weight is None:
-            self.weight = Parameter(empty((num_embeddings, embedding_dim)))
+            self.weight = Parameter(tt.empty((num_embeddings, embedding_dim)))
             self.reset_parameters()
         else:
             assert list(_weight.shape) == [num_embeddings,
@@ -42,11 +42,11 @@ class Embedding(Module):
         if self.padding_idx is not None:
             self.weight.data[self.padding_idx] = 0
 
-    def forward(self, inpt: Tensor):
+    def forward(self, inpt):
         return F.embedding(inpt, self.weight, self.padding_idx, self.max_norm, self.norm_type, self.scale_grad_by_freq,
                            self.sparse)
 
-    def extra_repr(self) -> str:
+    def extra_repr(self):
         s = '{num_embeddings}, {embedding_dim}'
         if self.padding_idx is not None:
             s += ', padding_idx={padding_idx}'
