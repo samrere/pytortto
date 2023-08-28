@@ -20,15 +20,13 @@ When computed in GPU, Tortto is around 1.5(vision transformers) ~ 3(CNNs) times 
 
 Tortto implements reverse mode automatic differentiation and supports dynamic computation graph like pytorch.
 
-New in the latest version (1.3)  
-* Computation graph now uses operations as nodes, instead of using tensors.
-* Supports in-place operations.
-
-
 ## Installation
 ```python
 pip install tortto
 ```
+## New in version 1.3
+* Computation graph now uses operations as nodes, instead of using tensors.
+* Supports in-place operations.
 
 ## Prerequisites
 **numpy** (required): Only use its basic functions.  
