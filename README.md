@@ -9,7 +9,6 @@
   - [Vision Transformer](#Vision-Transformer)
   - [DCGAN](#DCGAN)
   - [YOLOv1](#YOLOv1)
-- [Supported functionalities](#Supported-functionalities)
 
 
 ## Intro
