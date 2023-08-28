@@ -81,7 +81,7 @@ print(x0.grad)
 ```
 
 tortto also implements common Modules. Let's try `Conv2d` and compare its result and speed with pytorch:  
-[conv2d comparison in GPU](https://github.com/samrere/pytortto/blob/main/src/conv2d_result_speed_comparison.ipynb)  
+[conv2d comparison in GPU](https://github.com/samrere/pytortto/blob/main/examples/conv2d_result_speed_comparison.ipynb)  
 
 ### [quick start: reverse prediction](https://github.com/samrere/pytortto/blob/main/examples/transformers/reverse_prediction.ipynb)
 Next, Let's train a transformer encoder in 40 seconds, inspired from [UvA Deep Learning Tutorials](https://uvadlc-notebooks.readthedocs.io/en/latest/tutorial_notebooks/tutorial6/Transformers_and_MHAttention.html):  
