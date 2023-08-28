@@ -1,4 +1,5 @@
-from tortto import *
+from tortto import np, cp, cparray
+
 
 def sgd(params, d_p_list, momentum_buffer_list, weight_decay, momentum, lr, dampening, nesterov):
     for i, param in enumerate(params):
@@ -33,9 +34,8 @@ def adam(params,  # list of tensor
          lr,
          weight_decay,
          eps):
-
     if grads:
-        xp = cp if grads[0].__class__ is cp_ndarray else np
+        xp = cp if grads[0].__class__ is cparray else np
 
     for i, param in enumerate(params):
         grad = grads[i]
@@ -80,9 +80,8 @@ def adamw(params,  # list of tensor
           lr,
           weight_decay,
           eps):
-
     if grads:
-        xp = cp if grads[0].__class__ is cp_ndarray else np
+        xp = cp if grads[0].__class__ is cparray else np
 
     for i, param in enumerate(params):
         grad = grads[i]

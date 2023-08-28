@@ -48,12 +48,12 @@ class _ConvNd(Module):
         self.reset_parameters()
 
     def reset_parameters(self):
-        xp = cp if self.weight.__class__ is cp_ndarray else np
         init.kaiming_uniform_(self.weight, a=math.sqrt(5))
         if self.bias is not None:
             fan_in, _ = init._calculate_fan_in_and_fan_out(self.weight)
-            bound = 1 / math.sqrt(fan_in)
-            self.bias.data = xp.random.uniform(low=-bound, high=bound, size=self.bias.shape).astype(np.float32)
+            if fan_in != 0:
+                bound = 1 / math.sqrt(fan_in)
+                init.uniform_(self.bias, -bound, bound)
 
     def extra_repr(self):
         s = ('{in_channels}, {out_channels}, kernel_size={kernel_size}'
@@ -124,7 +124,7 @@ class _ConvTransposeNd(_ConvNd):
             if len(output_size) != k:
                 raise ValueError(
                     "output_size must have {} or {} elements (got {})"
-                        .format(k, k + 2, len(output_size)))
+                    .format(k, k + 2, len(output_size)))
 
             min_sizes = []
             max_sizes = []

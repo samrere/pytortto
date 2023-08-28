@@ -10,11 +10,10 @@ from .normalization import LayerNorm
 
 
 class TransformerEncoderLayer(Module):
-
     __constants__ = ['batch_first', 'norm_first']
 
-    def __init__(self, d_model, nhead, dim_feedforward = 2048, dropout = 0.1, activation = F.relu,
-                 layer_norm_eps = 1e-5, batch_first = False, norm_first = False):
+    def __init__(self, d_model, nhead, dim_feedforward=2048, dropout=0.1, activation=F.relu,
+                 layer_norm_eps=1e-5, batch_first=False, norm_first=False):
 
         super(TransformerEncoderLayer, self).__init__()
         self.self_attn = MultiheadAttention(d_model, nhead, dropout=dropout, batch_first=batch_first)
@@ -31,7 +30,7 @@ class TransformerEncoderLayer(Module):
 
         self.activation = activation
 
-    def forward(self, src, src_mask = None, src_key_padding_mask = None):
+    def forward(self, src, src_mask=None, src_key_padding_mask=None):
         x = src
         if self.norm_first:
             x = x + self._sa_block(self.norm1(x), src_mask, src_key_padding_mask)
@@ -51,6 +50,7 @@ class TransformerEncoderLayer(Module):
         x = self.linear2(self.dropout(self.activation(self.linear1(x))))
         return self.dropout2(x)
 
+
 class TransformerEncoder(Module):
     __constants__ = ['norm']
 
@@ -60,7 +60,7 @@ class TransformerEncoder(Module):
         self.num_layers = num_layers
         self.norm = norm
 
-    def forward(self, src, mask = None, src_key_padding_mask = None):
+    def forward(self, src, mask=None, src_key_padding_mask=None):
         output = src
 
         for mod in self.layers:
