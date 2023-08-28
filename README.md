@@ -74,6 +74,9 @@ x = x0 + 0 # make it non-leaf for in-place operations
 x[:, 2:] = tt.sign(x[:, 2:]) * tt.sqrt(tt.abs_(x[:, 2:]))
 x.backward(x)
 
+print(x._version)
+# 2
+
 print(x0.grad)
 # [[-0.5722 -1.3110 -0.5000 -0.5000]
 #  [ 0.0945 -1.2108 -0.5000  0.5000]
