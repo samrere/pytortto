@@ -7,9 +7,7 @@ os.environ['CUPY_ACCELERATORS']='cub'
 """
 import configparser
 
-config = configparser.ConfigParser()
-config.read('../setup.cfg')
-__version__ = config['metadata']['version']
+__version__ = '1.3.1'
 
 from .xparray import *
 from .tensor import *
