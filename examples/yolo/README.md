@@ -1,2 +1,2 @@
 ## work in progress 
-loss is tested
+loss tested
