@@ -88,7 +88,7 @@ tortto also implements common Modules. Let's try `Conv2d` and compare its result
 Next, Let's train a transformer encoder in 40 seconds, inspired from [UvA Deep Learning Tutorials](https://uvadlc-notebooks.readthedocs.io/en/latest/tutorial_notebooks/tutorial6/Transformers_and_MHAttention.html):  
 The goal is to train a simple transformer encoder that can reverse the input sequence. i.e. if the input is `4,1,9,7,5,2,2`, the correct output would be `2,2,5,7,9,1,4`.  
 <p align="left">
-  <img src="https://github.com/samrere/pytortto/blob/main/img/sequence_reverse.png" width="250">
+  <img src="https://github.com/samrere/pytortto/blob/main/img/sequence_reverse.png?raw=True" width="250">
 </p>
 
 
