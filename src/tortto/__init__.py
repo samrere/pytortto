@@ -5,9 +5,8 @@ import os
 os.environ['CUPY_TF32']='1' # only available on GPUs with compute capability 8.0 or higher
 os.environ['CUPY_ACCELERATORS']='cub'
 """
-import configparser
 
-__version__ = '1.3.2'
+__version__ = '1.3.4'
 
 from .xparray import *
 from .tensor import *
